@@ -1,3 +1,41 @@
+Release Note: Android ADB Stress Test Console (TPM/APM Edition)
+[v3.8.2] - 2026-04-21 (TPM/APM Edition)
+English
+This release, dubbed the TPM/APM Edition, significantly expands the tool's capabilities into deep system-level and framework stress testing. It introduces advanced hardware interaction simulations and highly requested UI/UX features for professional lab environments.
+New Features & Enhancements:
+•	Deep System Stressors:
+•	Fingerprint HAL Stress: Simulates biometric polling and response stability during screen wake cycles.
+•	MDM Framework Stress: Automates the creation and teardown of Managed Work Profiles to test Enterprise/DPM stability.
+•	Storage/Fake OOM Fill: Dynamically calculates and fills storage to a target percentage (e.g., 95%) to test device behavior under extreme low-space conditions.
+•	Enhanced Reboot Logic:
+•	Reboot & Shutdown Stress: Now supports a dual-phase "Reboot + Optional Shutdown" cycle with configurable wait timers.
+•	Robust Reconnection: Improved TCP/IP reconnection logic that suppresses timeout errors during device boot-up for smoother automated loops.
+•	Enterprise Connectivity:
+•	Multi-Subnet Scanning: Supports scanning multiple network segments simultaneously (e.g., 15.38.67.x and 15.38.65.x).
+•	USB Initialization Tool: New "Wake USB" (喚醒 USB) button to quickly toggle adb tcpip 5555 mode across all connected cables.
+•	UI/UX Improvements:
+•	Executive Dashboard: Integrated a high-visibility stats panel showing real-time connected devices and active test counts.
+•	Silent Execution: Implemented hidden CMD window flags for Windows to prevent annoying pop-ups during automated tasks.
+•	TPM Easter Egg: Added an interactive "Overdrive Mode" providing project context and team blessings.
+________________________________________
+中文版
+此版本命名為 TPM/APM 特仕版，將工具能力大幅擴展至深層系統級與框架壓力測試。本版本引入了先進的硬體互動模擬，以及針對專業實驗室環境設計的 UI/UX 優化。
+新功能與強化項目：
+•	深層系統壓力測試：
+•	指紋 HAL 壓力測試：模擬生物辨識輪詢與螢幕喚醒期間的反應穩定性。
+•	MDM 框架壓力測試：自動化建立與移除「受管工作設定檔」(Work Profile)，用以測試企業級 DPM 的穩定性。
+•	空間佔滿/模擬 OOM：動態計算並將儲存空間填寫至目標百分比（如 95%），以測試設備在極低空間下的行為。
+•	強化版重啟邏輯：
+•	重啟與關機壓力測試：新增支援「重啟 + 選配關機」雙階段循環，並可自訂等待計時器。
+•	強韌連線機制：優化了 TCP/IP 重連邏輯，能自動忽略開機過程中的逾時錯誤，使自動化循環更順暢。
+•	企業級連線能力：
+•	多網段掃描：支援同時掃描多組區域網路路徑（例如 15.38.67.x 與 15.38.65.x）。
+•	USB 初始化工具：新增「喚醒 USB」按鈕，快速將所有實體連線設備切換至 adb tcpip 5555 模式。
+•	UI/UX 優化項目：
+•	戰情儀表板：整合高能見度統計面板，即時顯示已連線設備數與執行中的測試總數。
+•	靜默執行：針對 Windows 環境實作了 CMD 視窗隱藏標記，防止自動化任務期間彈出大量視窗。
+•	TPM 隱藏彩蛋：新增互動式「Overdrive 模式」，提供專案背景資訊與團隊祝福。
+
 ## Release Note: Android ADB Stress Test Console
 
 ### [v2.1.0] - 2026-04-17 (Pro Edition)
