@@ -1,4 +1,31 @@
-Release Note: Android ADB Stress Test Console (TPM/APM Edition)
+🚀 Release Notes (版本更新日誌)
+[Latest Version] v3.9.3 - May 01, 2026
+🇹🇼 中文更新說明：
+【重大更新與安全性升級】
+
+🔒 新增 GDPR 隱私合規機制 (GDPR Privacy Consent)： 程式啟動時加入強制性隱私權同意聲明，明確告知系統日誌 (Logcat / Bugreport) 皆採「本地端存儲，絕不上傳」，確保測試流程符合國際資料保護法規。
+
+🌐 全網域智能掃描引擎 (Omni-Network Discovery)： 突破過往雙網卡掃描盲區！現已支援同時動態偵測並掃描電腦上所有的 Wi-Fi 與 Ethernet (有線網路) 網段，實現真正的多設備「隨插即掃」。
+
+🧠 智能死機偵測系統 (Smart Bootloop Detector)： 升級設備離線的判定邏輯。能精準分辨設備是「單純網路斷線」還是「卡在開機畫面 (Bootloop)」，大幅消除自動化測試的誤判。
+
+🛑 關機指令雙重防呆 (Double Confirmation Safety)： 當使用者勾選「徹底斷電 (Shutdown)」時，新增高警示級別的確認視窗，避免無人值守機台因缺乏硬體喚醒機制而永久失聯。
+
+🐛 狀態鎖定修復： 修正了切換測試項目時，設備選取狀態會意外清空的 UI 臭蟲 (exportselection=False)。
+
+🇬🇧 English Release Notes:
+【Major Updates & Security Enhancements】
+
+🔒 Added GDPR Privacy Consent Mechanism: Implemented a mandatory privacy consent dialog on startup. It explicitly clarifies that all system logs (Logcat / Bugreport) are "stored locally and never uploaded," ensuring the testing process complies with international data protection regulations.
+
+🌐 Omni-Network Discovery Engine: Breakthrough in multi-NIC scanning! Now supports simultaneous, dynamic detection and scanning across all active Wi-Fi and Ethernet subnets on the host PC, enabling true "Plug & Play" for multiple devices.
+
+🧠 Smart Bootloop Detector: Upgraded offline determination logic. Accurately distinguishes between a "simple network disconnection" and a "device stuck in a bootloop," drastically reducing false alarms in automated testing.
+
+🛑 Double Confirmation Safety for Shutdown: Added a high-priority warning dialog when the "Shutdown" option is checked. This prevents unattended devices from being permanently lost if they lack a hardware auto-wake mechanism.
+
+🐛 UI State Lock Fix: Resolved an annoying UI bug where the device selection state would inadvertently clear when switching test options (exportselection=False).
+
 [v3.8.2] - 2026-04-21 (TPM/APM Edition)
 English
 This release, dubbed the TPM/APM Edition, significantly expands the tool's capabilities into deep system-level and framework stress testing. It introduces advanced hardware interaction simulations and highly requested UI/UX features for professional lab environments.

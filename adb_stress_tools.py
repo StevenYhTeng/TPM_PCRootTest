@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
 # ==========================================
-# Helper: 完全靜默隱藏 Windows 彈出 CMD 視窗
+# Helper: Completely hide Windows CMD popups
 # ==========================================
 def get_cflags():
     if os.name == 'nt':
@@ -27,7 +27,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 class ADBStressGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Android ADB Stress Test Console (TPM/APM Edition) v3.8.2")
+        self.root.title("Android ADB Stress Test Console (TPM/APM Edition) v3.9.3")
         self.root.geometry("1100x950")
         
         try:
@@ -44,10 +44,57 @@ class ADBStressGUI:
 
         self.setup_ui()
         
+        # 🌟 GDPR Compliance Check on Startup
+        self.check_gdpr_consent()
+        
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-    def get_default_subnets(self):
-        return "15.38.67., 15.38.65."
+    def check_gdpr_consent(self):
+        """Display GDPR and Privacy Consent dialog before using the tool."""
+        msg = (
+            "GDPR & Privacy Data Notice:\n\n"
+            "This tool extracts System Logs (Logcat) and Bugreports from connected Android devices.\n"
+            "Please be aware that Android logs may contain Personally Identifiable Information (PII) "
+            "such as email accounts, location data, Wi-Fi SSIDs, and device identifiers (IMEI/MAC).\n\n"
+            "All extracted data is stored STRICTLY LOCALLY in the 'PC_Test_Logs' directory on this machine "
+            "and is NEVER transmitted over the internet by this software.\n\n"
+            "By clicking 'Yes', you confirm that you are authorized to process this data for testing purposes, "
+            "and you agree to comply with GDPR and local data protection laws regarding the handling of these files.\n\n"
+            "Do you agree to proceed?"
+        )
+        consent = messagebox.askyesno("Privacy Consent & GDPR Compliance", msg)
+        if not consent:
+            self.root.destroy()
+            sys.exit(0)
+
+    def get_all_local_subnets(self):
+        """Dynamically detect ALL active local subnets of the PC (Wi-Fi, Ethernet, etc.)"""
+        subnets = set()
+        
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            parts = local_ip.split('.')
+            subnets.add(f"{parts[0]}.{parts[1]}.{parts[2]}.")
+        except Exception:
+            pass
+            
+        try:
+            hostname = socket.gethostname()
+            _, _, ips = socket.gethostbyname_ex(hostname)
+            for ip in ips:
+                if not ip.startswith("127.") and not ip.startswith("169.254."):
+                    parts = ip.split('.')
+                    subnets.add(f"{parts[0]}.{parts[1]}.{parts[2]}.")
+        except Exception:
+            pass
+            
+        if not subnets:
+            return "192.168.1."
+            
+        return ", ".join(list(subnets))
 
     def setup_ui(self):
         left_container = tk.Frame(self.root, width=420, padx=10, pady=10)
@@ -75,9 +122,11 @@ class ADBStressGUI:
         scan_frame = tk.Frame(dev_frame)
         scan_frame.pack(fill=tk.X, pady=(0, 5))
         
+        local_prefixes = self.get_all_local_subnets()
+        
         tk.Label(scan_frame, text="Subnet:", font=("Arial", 9)).pack(side=tk.LEFT)
         self.entry_ip_prefix = tk.Entry(scan_frame, font=("Arial", 9), width=20)
-        self.entry_ip_prefix.insert(0, self.get_default_subnets())
+        self.entry_ip_prefix.insert(0, local_prefixes)
         self.entry_ip_prefix.pack(side=tk.LEFT, padx=(0, 2))
         
         self.entry_ip_start = tk.Entry(scan_frame, font=("Arial", 9), width=3)
@@ -103,10 +152,10 @@ class ADBStressGUI:
         self.btn_manual_conn = tk.Button(manual_conn_frame, text="🔗 Connect IP", font=("Arial", 9, "bold"), bg="#03A9F4", fg="white", command=self.manual_connect)
         self.btn_manual_conn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
 
-        self.btn_init_usb = tk.Button(manual_conn_frame, text="🔌 喚醒 USB", font=("Arial", 9, "bold"), bg="#9C27B0", fg="white", command=self.init_usb_tcpip)
+        self.btn_init_usb = tk.Button(manual_conn_frame, text="🔌 Init USB", font=("Arial", 9, "bold"), bg="#9C27B0", fg="white", command=self.init_usb_tcpip)
         self.btn_init_usb.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(2, 0))
 
-        self.device_listbox = tk.Listbox(dev_frame, selectmode=tk.MULTIPLE, height=7, font=("Consolas", 10))
+        self.device_listbox = tk.Listbox(dev_frame, selectmode=tk.MULTIPLE, height=7, font=("Consolas", 10), exportselection=False)
         self.device_listbox.pack(fill=tk.X, pady=(0, 5))
         
         self.btn_refresh_dev = tk.Button(dev_frame, text="🔄 Refresh Devices", command=self.refresh_devices)
@@ -114,10 +163,10 @@ class ADBStressGUI:
 
         tk.Label(control_frame, text="⚙️ Configure Next Test", font=("Arial", 12, "bold")).pack(anchor=tk.W, pady=(0, 5))
         
-        self.test_type_var = tk.StringVar(value="Fingerprint HAL & Screen Wake Stress")
+        self.test_type_var = tk.StringVar(value="Reboot & Shutdown Stress")
         test_options = [
-            "Fingerprint HAL & Screen Wake Stress",
             "Reboot & Shutdown Stress",
+            "Fingerprint HAL & Screen Wake Stress",
             "MDM Framework Stress (Work Profile)",
             "Background Download Stress (curl/wget)", 
             "Browser Download Stress (Intent)",       
@@ -148,16 +197,16 @@ class ADBStressGUI:
         self.entry_target.pack(fill=tk.X, pady=(0, 15))
 
         self.reboot_frame = tk.LabelFrame(control_frame, text="Reboot & Shutdown Settings", padx=10, pady=10)
-        tk.Label(self.reboot_frame, text="⏱️ Reboot 開機完等待多久 (sec):", font=("Arial", 9)).pack(anchor=tk.W)
+        tk.Label(self.reboot_frame, text="⏱️ Wait after boot (sec):", font=("Arial", 9)).pack(anchor=tk.W)
         self.entry_reboot_up = tk.Entry(self.reboot_frame, font=("Arial", 10))
         self.entry_reboot_up.insert(0, "60")
         self.entry_reboot_up.pack(fill=tk.X, pady=(0, 5))
         
         self.do_shutdown_var = tk.BooleanVar(value=False)
-        self.chk_do_shutdown = tk.Checkbutton(self.reboot_frame, text="🛑 包含 Shutdown (關機) 階段\n(警告: 若無硬體通電喚醒機制，設備將永久關機)", variable=self.do_shutdown_var, fg="#F44336", justify=tk.LEFT)
+        self.chk_do_shutdown = tk.Checkbutton(self.reboot_frame, text="🛑 Include Shutdown Phase\n(Warning: Device will stay off if no hardware auto-wake exists)", variable=self.do_shutdown_var, fg="#F44336", justify=tk.LEFT, command=self.verify_shutdown_check)
         self.chk_do_shutdown.pack(anchor=tk.W, pady=(5, 0))
 
-        tk.Label(self.reboot_frame, text="⏳ Shutdown 後等待多久 (sec):", font=("Arial", 9)).pack(anchor=tk.W)
+        tk.Label(self.reboot_frame, text="⏳ Wait after shutdown (sec):", font=("Arial", 9)).pack(anchor=tk.W)
         self.entry_reboot_down = tk.Entry(self.reboot_frame, font=("Arial", 10))
         self.entry_reboot_down.insert(0, "30")
         self.entry_reboot_down.pack(fill=tk.X, pady=(0, 5))
@@ -233,7 +282,6 @@ class ADBStressGUI:
         self.entry_wake_time.insert(0, "10") 
         self.entry_wake_time.pack(fill=tk.X, pady=(0, 5))
 
-        # --- 右側區塊：TPM APM Dashboard + 系統日誌 ---
         right_frame = tk.Frame(self.root, padx=10, pady=10)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
@@ -264,14 +312,28 @@ class ADBStressGUI:
 
         self.on_test_type_changed(None)
         
-        self.ui_log(f"System ready. You can scan Subnet or use Manual Connect for Ethernet.")
+        self.ui_log(f"System ready. Automatically detecting local subnets and initializing scan...")
+        self.root.after(500, self.auto_connect_subnet)
+        
         self.update_dashboard_stats()
+
+    def verify_shutdown_check(self):
+        if self.do_shutdown_var.get():
+            ans = messagebox.askyesno(
+                "CRITICAL WARNING",
+                "You are about to enable the 'Shutdown' phase.\n\n"
+                "Does your device have a hardware auto-wake mechanism (e.g., BIOS AC Power-On or a Smart Plug)?\n\n"
+                "If NO, the device will STAY POWERED OFF permanently after the first cycle, and the test will fail.\n\n"
+                "Do you want to proceed?"
+            )
+            if not ans:
+                self.do_shutdown_var.set(False)
 
     def copy_logs(self):
         try:
             self.root.clipboard_clear()
             self.root.clipboard_append(self.text_log.get("1.0", tk.END))
-            messagebox.showinfo("Copied", "✅ 所有系統日誌已成功複製到剪貼簿！")
+            messagebox.showinfo("Copied", "✅ All system logs successfully copied to clipboard!")
         except:
             pass
 
@@ -286,7 +348,7 @@ class ADBStressGUI:
     def manual_connect(self):
         ip = self.entry_manual_ip.get().strip()
         if not ip:
-            messagebox.showerror("Error", "請先輸入要手動連線的 IP 位址！")
+            messagebox.showerror("Error", "Please enter an IP address to connect manually!")
             return
         self.ui_log(f"🔗 Attempting manual connection to {ip}:5555...")
         threading.Thread(target=self._bg_manual_connect, args=(ip,), daemon=True).start()
@@ -315,22 +377,18 @@ class ADBStressGUI:
         self.lbl_tpm_title.config(text="🚀 OVERDRIVE MODE ACTIVATED 🚀", fg="#FF00FF")
         self.text_log.config(fg="#FF00FF") 
         self.ui_log("==================================================")
-        self.ui_log("程式說明 / Program Description")
-        self.ui_log("本程式主要用於 測試 Android Device，由 TPM 團隊自行開發，並非 HP 的正式 Release 軟體。請在測試與使用過程中留意其性質與用途。")
+        self.ui_log("Program Description")
         self.ui_log("This program is primarily designed for testing Android Devices. It was independently developed by the TPM team and is not an official HP Release. Please be mindful of its nature and intended usage during testing.")
         self.ui_log("")
-        self.ui_log("祝福 / Blessing")
-        self.ui_log("願神保守我們與專案的進行，並賜下平安與智慧。")
+        self.ui_log("Blessing")
         self.ui_log("May God protect us and our project, granting us peace and wisdom.")
         self.ui_log("==================================================")
         
-        msg = ("程式說明 / Program Description\n"
-               "本程式主要用於 測試 Android Device，由 TPM 團隊自行開發，並非 HP 的正式 Release 軟體。請在測試與使用過程中留意其性質與用途。\n"
+        msg = ("Program Description\n"
                "This program is primarily designed for testing Android Devices. It was independently developed by the TPM team and is not an official HP Release. Please be mindful of its nature and intended usage during testing.\n\n"
-               "祝福 / Blessing\n"
-               "願神保守我們與專案的進行，並賜下平安與智慧。\n"
+               "Blessing\n"
                "May God protect us and our project, granting us peace and wisdom.")
-        messagebox.showinfo("🎉 隱藏訊息", msg)
+        messagebox.showinfo("🎉 Easter Egg", msg)
 
     def init_usb_tcpip(self):
         self.ui_log("🔌 Searching for USB connected devices to initialize TCP/IP...")
@@ -351,7 +409,7 @@ class ADBStressGUI:
                         
             if not usb_devices:
                 self.ui_log("⚠️ No USB devices found! Please connect device via USB first.")
-                messagebox.showwarning("Warning", "沒有偵測到透過 USB 連接的設備！\n\n請先用實體 USB 線將設備連接至電腦，再按一次此按鈕。")
+                messagebox.showwarning("Warning", "No USB connected device detected!\n\nPlease connect the device to the PC using a physical USB cable, then click this button again.")
                 return
                 
             for serial in usb_devices:
@@ -361,8 +419,8 @@ class ADBStressGUI:
                 else:
                     subprocess.run(["adb", "-s", serial, "tcpip", "5555"], capture_output=True, timeout=5)
             
-            self.ui_log("✅ Initialization complete! You can unplug the USB cable now and click 'Scan Wi-Fi'.")
-            messagebox.showinfo("Success", "5555 通訊埠已強制開啟！\n\n現在您可以拔掉 USB 線，並點擊右方的「掃描 Wi-Fi」按鈕了。")
+            self.ui_log("✅ Initialization complete! You can unplug the USB cable now and click 'Scan'.")
+            messagebox.showinfo("Success", "Port 5555 has been forced open!\n\nYou can now unplug the USB cable and click the 'Scan' button.")
             
         except Exception as e:
             self.ui_log(f"❌ Failed to init USB devices: {e}")
@@ -449,10 +507,19 @@ class ADBStressGUI:
     def _bg_auto_connect(self, prefixes, start, end):
         self.ui_log(f"📡 Fast scanning subnets: {', '.join(prefixes)} (Range: {start}~{end})...")
         
+        self.ui_log("⏳ Initializing ADB Daemon...")
+        try:
+            if os.name == 'nt':
+                subprocess.run("adb start-server", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, **get_cflags())
+            else:
+                subprocess.run(["adb", "start-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        except:
+            pass
+
         def connect_ip(ip):
             cmd = f"adb connect {ip}:5555" if os.name == 'nt' else ["adb", "connect", f"{ip}:5555"]
             try:
-                subprocess.run(cmd, shell=(os.name == 'nt'), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2, **get_cflags())
+                subprocess.run(cmd, shell=(os.name == 'nt'), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4, **get_cflags())
             except:
                 pass
 
@@ -873,7 +940,7 @@ class ADBStressGUI:
             # === Start Actual Test Logic ===
             
             if test_type == "Fingerprint HAL & Screen Wake Stress":
-                self.ui_log(f"💡 [Interactive Test] 您可以在測試期間，隨時用手觸碰指紋感測器來測試反應速度。", serial, run_log_file)
+                self.ui_log(f"💡 [Interactive Test] You can touch the fingerprint sensor anytime during the test to check responsiveness.", serial, run_log_file)
                 for i in range(1, target_val + 1):
                     if not self.device_testing_state.get(serial, False): break
                     self.ui_log(f"--- Cycle {i}/{target_val} : Fingerprint HAL Polling & Screen Off ---", serial, run_log_file)
@@ -883,7 +950,7 @@ class ADBStressGUI:
                         fp_out = self.run_adb(["shell", "dumpsys", "biometric"], serial=serial)
                         
                     if "Can't find service" in fp_out or not fp_out.strip():
-                        self.ui_log("⚠️ Warning: 無法取得 Fingerprint / Biometric 服務狀態 (HAL 可能崩潰或設備無感測器)", serial, run_log_file)
+                        self.ui_log("⚠️ Warning: Unable to retrieve Fingerprint/Biometric service state (HAL may have crashed or sensor is absent)", serial, run_log_file)
                     else:
                         self.ui_log("✅ Fingerprint Service is ALIVE.", serial, run_log_file)
                         
@@ -914,39 +981,48 @@ class ADBStressGUI:
                     self.run_adb(["reboot"], serial=serial)
                     time.sleep(10)
                     
-                    self.ui_log("⏳ Waiting for device to boot up and reconnect (Timeout 10 mins)...", serial, run_log_file)
+                    self.ui_log("⏳ Waiting for device to boot up and reconnect (Timeout 15 mins)...", serial, run_log_file)
                     wait_start = time.time()
                     device_online = False
                     
-                    while time.time() - wait_start < 600:
+                    while time.time() - wait_start < 900:
                         if not self.device_testing_state.get(serial, False): break
                         
                         if ":" in serial:
-                            # 🌟 完美修復：利用 try...except 忽略 Python 遇到 timeout 時自動拋出的 TimeoutExpired 錯誤！
                             try:
                                 if os.name == 'nt':
+                                    subprocess.run(f"adb disconnect {serial}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **get_cflags())
                                     subprocess.run(f"adb connect {serial}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, **get_cflags())
                                 else:
+                                    subprocess.run(["adb", "disconnect", serial], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                                     subprocess.run(["adb", "connect", serial], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
                             except:
-                                pass # 忽略 Timeout 錯誤，讓迴圈繼續嘗試連線，直到設備開機
+                                pass 
                         
                         sys_boot = self.run_adb(["shell", "getprop", "sys.boot_completed"], serial=serial)
                         if "1" in sys_boot:
                             device_online = True
                             break
+                        elif sys_boot.strip() == "0" or sys_boot.strip() == "":
+                            pass
+                            
                         time.sleep(5)
                         
                     if not self.device_testing_state.get(serial, False): break
+                    
                     if not device_online:
-                        raise Exception(f"Cycle {i} Error: Device failed to boot or connect within 10 minutes.")
+                        check_conn = self.run_adb(["shell", "echo", "ping"], serial=serial)
+                        if "ping" in check_conn:
+                            raise Exception(f"Cycle {i} Error: Device is stuck in BOOTLOOP! (ADB connected but OS boot failed)")
+                        else:
+                            raise Exception(f"Cycle {i} Error: Device failed to boot or connect within 15 minutes.")
                         
                     self.ui_log(f"✅ Device boot completed. Holding for {reboot_up} sec...", serial, run_log_file)
                     
                     for remain in range(reboot_up, 0, -1):
                         if not self.device_testing_state.get(serial, False): break
                         if remain % 5 == 0 or remain <= 5:
-                            self.ui_log(f"   ... 等待 {remain} 秒", serial, run_log_file)
+                            self.ui_log(f"   ... Waiting {remain} sec", serial, run_log_file)
                         time.sleep(1)
                         
                     if not self.device_testing_state.get(serial, False): break
@@ -959,14 +1035,14 @@ class ADBStressGUI:
                         for remain in range(reboot_down, 0, -1):
                             if not self.device_testing_state.get(serial, False): break
                             if remain % 5 == 0 or remain <= 5:
-                                self.ui_log(f"   ... 距離下一圈還剩 {remain} 秒", serial, run_log_file)
+                                self.ui_log(f"   ... {remain} sec remaining until next cycle", serial, run_log_file)
                             time.sleep(1)
                     else:
                         self.ui_log(f"⏳ Skipping Shutdown phase. Waiting {reboot_down} sec interval before next Reboot...", serial, run_log_file)
                         for remain in range(reboot_down, 0, -1):
                             if not self.device_testing_state.get(serial, False): break
                             if remain % 5 == 0 or remain <= 5:
-                                self.ui_log(f"   ... 距離再次 Reboot 還剩 {remain} 秒", serial, run_log_file)
+                                self.ui_log(f"   ... {remain} sec remaining until next Reboot", serial, run_log_file)
                             time.sleep(1)
                         
                     completed = i
