@@ -1,5 +1,33 @@
 🚀 Release Notes (版本更新日誌)
-[Latest Version] v3.9.3 - May 01, 2026
+[Latest Version] v3.9.5 - May 04, 2026
+🇹🇼 中文更新說明：
+【系統守護與核心穩定性修復 (Anti-Zombie & Insomnia Update)】
+
+☕ 新增系統不眠機制 (Insomnia Update)： 導入 Windows 底層 API (SetThreadExecutionState)。程式執行期間將自動阻擋電腦進入睡眠或休眠模式，確保動輒數天的長時間壓力測試（如 10000 分鐘 Monkey）絕不因 PC 睡著而中斷；程式關閉後自動還原電源設定。
+
+🧟 消滅 ADB 殭屍進程死鎖： 拔除底層的 shell=True 呼叫，確保 Python 能夠 100% 獵殺超時的連線程序。徹底解決多網段掃描時，背景殘留大量 adb.exe 導致 ADB 伺服器癱瘓、無法再次 Scan 的死鎖問題。
+
+⚖️ 全網域掃描負載平衡： 將同時併發的網路掃描執行緒（Threads）從 200 智慧調降至 50。在維持極速掃描的同時，完美保護 ADB daemon 不受 DDoS 級別的請求衝擊。
+
+⏱️ 啟動時序與 UI 防假死修正： 調整 GDPR 隱私視窗的攔截順序，將其移至計時器與自動掃描觸發之前，解決程式剛開啟時卡住的 Bug。
+
+🧹 Logcat 記憶體洩漏修復： 完善背景系統日誌程序的文件控制代碼 (File Handles) 管理，防止執行超長天期測試時可能引發的記憶體洩漏 (Memory Leak)。
+
+🇬🇧 English Release Notes:
+【System Guardian & Core Stability Fixes (Anti-Zombie & Insomnia Update)】
+
+☕ Added System Insomnia Mechanism: Integrated Windows underlying APIs (SetThreadExecutionState). The application now automatically prevents the PC from entering sleep or hibernation modes during execution, ensuring long-term stress tests (e.g., 10000-min Monkey tests) are never interrupted. Normal power settings are restored upon exit.
+
+🧟 Eradicated ADB Zombie Process Deadlocks: Removed shell=True calls to ensure Python can 100% terminate timed-out connection processes. This completely resolves the severe deadlock issue where hundreds of residual adb.exe zombie processes paralyzed the ADB server during Omni-Network scanning.
+
+⚖️ Omni-Network Scanning Load Balancing: Intelligently reduced concurrent network scanning threads from 200 to 50. This maintains rapid scanning speeds while perfectly protecting the ADB daemon from DDoS-level connection spikes.
+
+⏱️ Startup Sequence & UI Freeze Correction: Reordered the GDPR privacy dialog to intercept before background timers and auto-scans trigger, resolving the UI freeze bug upon initial launch.
+
+🧹 Logcat Memory Leak Fix: Improved the file handle management for background logging processes, preventing potential memory leaks during extremely long-term stress testing.
+
+
+[Archived Version] v3.9.3 - May 01, 2026
 🇹🇼 中文更新說明：
 【重大更新與安全性升級】
 
