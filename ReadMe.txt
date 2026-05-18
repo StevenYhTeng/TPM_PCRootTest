@@ -1,5 +1,46 @@
 🚀 Release Notes (版本更新日誌)
-[Latest Version] v3.9.5 - May 04, 2026
+🚀 Android ADB Stress Test Console - 完整發布日誌 (v3.9.5 - v3.9.11)
+[Latest Build] v3.9.11 — Pre-flight Check & Flag Verifier Update
+•	🇹🇼 中文更新說明：
+o	MDM 測試前置強制預檢機制：當使用者選擇「MDM Framework Stress」並點擊 START 派發測試時，程式會立刻跳出一個醒目的紅色警告提示框。要求人工最後確認裝置是否已執行過 Factory Reset 且處於無帳號登入的純淨狀態，從源頭杜絕因環境不乾淨導致的配置失敗。
+o	APK 'testOnly' 屬性照妖鏡：在執行 Device Owner 超級管理員提權前，系統會自動透過底層 dumpsys package 進行深度掃描，檢查剛安裝好的 APK 是否真正包含 android:testOnly="true" 標記。若偵測到該標籤被編譯器或混淆工具剝離，工具將自動攔截並跳出明確的修正指引，避免盲目測試。
+o	基礎核心架構優化：精簡並模組化重構代碼，優化多執行緒併發處理能力，提升網域大量掃描時的介面響應速度與防假死效能。
+•	🇬🇧 English Release Notes:
+o	Mandatory MDM Pre-flight UI Prompt: Added a high-visibility safeguard confirmation dialog before starting MDM tests, forcing manual verification that target devices are factory reset and free of logged-in accounts.
+o	APK 'testOnly' Flag Verifier: Implemented an automated system-level package dump check (dumpsys package) to verify the android:testOnly="true" attribute before DPM execution, flashing clear diagnostic instructions if stripped by build optimization variants.
+o	Core Architecture Optimization: Modularized code blocks and enhanced multi-device concurrent stability, boosting UI responsiveness and crash-resistance during high-density subnet discoveries.
+________________________________________
+v3.9.10 — Auto-Bypass & Smart Account Check
+•	🇹🇼 中文更新說明：
+o	全面靜默繞過 Google Play Protect 審查：佈署 APK 前自動下達指令關閉全域包驗證器 (package_verifier_enable 0 與 verifier_verify_adb_installs 0)，徹底消滅實體設備畫面上彈出的 "Install Anyway" 的手動點擊阻擋，實現 100% 靜默佈署。
+o	環境智能預檢系統 (Smart Check)：提權前利用底層核心自動像 X 光一樣掃描手機內現存帳戶 (dumpsys account) 與殘留的多用戶配置 (pm list users)。若發現任何阻礙 Device Owner 提權的帳號，會立刻在日誌中印出明確的錯誤提示。
+o	框架異常轉譯：解碼 AOSP 框架底層的 set-device-owner 報錯訊息，將混淆的 RuntimeException 自動轉譯為具體可維護的中文排查方案（如提醒使用者 Factory Reset 等）。
+•	🇬🇧 English Release Notes:
+o	Google Play Protect Bypass: Automatically disabled package verification parameters during provisioning to eliminate the disruptive "Install Anyway" screen prompt on devices, achieving 100% silent deployment.
+o	Smart Account Pre-check: Integrated an automated account and profile scanner that logs explicit error advice immediately if a lingering Google or OEM account is blocking the device owner provisioning.
+o	Framework Exception Decoupling: Decoded AOSP underlying device policy shell errors into highly readable, actionable troubleshooting descriptions within the session log.
+________________________________________
+v3.9.8 - v3.9.9 — Deploy Fix & Parameter Decoupling
+•	🇹🇼 中文更新說明：
+o	安裝與授權模組解耦：將「安裝 APK」與「設定 Device Owner」拆分為兩個獨立打勾選項，支援使用者手動裝完 App 後、僅由工具進行提權測試。
+o	開放自訂管理員元件名稱 (Component Name)：UI 面板開放文字輸入框，支援自訂 Receiver 類別路徑（預設為 com.mdm.client/.MyDeviceAdminReceiver），防止因開發團隊中途修改包名（Package Name）導致自動化腳本失效。
+o	佈署超時延長與引號修復：移除底層傳遞時多餘的路徑引號 Bug，並為大容量企業級 MDM APK 提供 120 秒專屬超時緩衝；同時合併 stderr 輸出，提供更豐富的錯誤捕獲。
+•	🇬🇧 English Release Notes:
+o	Deployment Parameter Decoupling: Separated APK installation and Device Owner assignment into independent UI checkboxes, allowing standalone privilege promotion on pre-installed app assets.
+o	Custom Admin Component Input: Added a text field for flexible target component definition (Package/.Receiver), resolving script breaks caused by development branch package renames.
+o	Timeout Extension & Quoting Fix: Fixed an OS path quoting bug and extended the provisioning timeout to 120 seconds to guarantee smooth processing for larger enterprise apps, merging stderr for clean diagnostics.
+________________________________________
+v3.9.6 - v3.9.7 — MDM Provisioning Initial Framework
+•	🇹🇼 中文更新說明：
+o	首度導入 MDM 自動化生命週期壓力測試：新增專屬「MDM Framework Stress (Work Profile)」測試選項，自動循環下達 pm create-user --profileOf 0 --managed MDM_Stress 與 pm remove-user，模擬企業託管設定檔的建立與撕毀極限測試。
+o	批次靜默動態權限授予：在佈署階段強制導入 -g 參數，迫使系統在安裝時直接靜默批准清單中的所有動態敏感權限。
+o	自動化連鎖指令核心：實現一鍵連鎖：Play Protect 關閉 $\rightarrow$ 安裝 $\rightarrow$ Device Owner 提權 $\rightarrow$ 靜默賦予系統日誌讀取權限 (READ_LOGS) $\rightarrow$ 開始壓力測試。
+•	🇬🇧 English Release Notes:
+o	Introduction of MDM Life-cycle Stress Testing: Released the dedicated "MDM Framework Stress (Work Profile)" test matrix, automatically cycling profile creation and deletion via commands to simulate intense enterprise container life cycles.
+o	Silent Runtime Permission Auto-Grant (-g): Enforced the critical -g runtime parameter during app push sequences to automatically grant all dynamic manifest privileges silently.
+o	Chained Automation Protocol: Enabled seamless single-click sequence orchestration: Verifier bypass $\rightarrow$ Push $\rightarrow$ Device Owner lock $\rightarrow$ READ_LOGS bypass $\rightarrow$ Stress iteration.
+
+v3.9.5 - May 04, 2026
 🇹🇼 中文更新說明：
 【系統守護與核心穩定性修復 (Anti-Zombie & Insomnia Update)】
 
