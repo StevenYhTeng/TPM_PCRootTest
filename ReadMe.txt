@@ -1,4 +1,70 @@
 🚀 Release Notes (版本更新日誌)
+# 🚀 Release Notes: ADB Stress Test Console (v3.9.11 ➔ v3.9.29)
+### ⚠️ 【重要測試前置作業】
+**在開始進行任何測試之前，請務必確認最新版（v7.0）的 `TPM_OSD.apk` 已與 Python 執行檔放置於同一個資料夾，並強烈建議「手動安裝」至測試設備中一次**。若未安裝此 APK，最新導入的 OSD 浮水印系統與防止系統殺後台的雙重喚醒機制將無法正常運作！
+### 🌟 重大功能更新 (Major Features)
+* **全新 OSD 浮水印系統 (整合 v7.0 APK)**
+* 現在可於測試機螢幕右上角即時顯示「設備序號、IP 位置、當前執行測試」。
+* **終極換行修復**：首創使用自訂 `||` 符號傳輸機制，徹底避開 Windows CMD 與 Android Shell 之間的「逃脫字元 (Escape Character)」衝突，實現完美斷行與大字體顯示。
+
+* **智慧儀表板與快速連線模組**
+* 新增 **Executive Dashboard (測試儀表板)**，即時監控連線設備數量與活躍測試數。
+* 支援 **Subnet Scan (網段全區掃描)** 與 **USB 快速初始化 TCP/IP (Port 5555)** 功能。
+
+### 🛡️ 系統相容性與穩定性 (System Compatibility)
+* **全面支援 Android 14 / 15 / 16 安全機制**
+* **突破背景限制 (BAL)**：使用「跳板 Activity (Trampoline)」雙重喚醒機制，完美繞過系統對背景啟動 Service 的封殺。
+* **突破廣播攔截**：加入 `RECEIVER_EXPORTED` 標籤與「定向廣播 (`-p`)」，防止廣播被 Android 安全子系統靜默丟棄。
+* **防休眠白名單**：加入 `dumpsys deviceidle whitelist`，防止長期測試下 OSD 或背景任務被電池管家 (Doze Mode) 獵殺。
+
+### 🛠️ 測試模組強化 (Testing Module Enhancements)
+* **進階 Storage I/O (NVMe/UFS) 測試面板**
+* 支援動態掃描 (Fetch) 設備上所有真實可讀寫的儲存掛載路徑。
+* 支援多路徑選擇，並可自由切換 **「並發 (Concurrent)」** 或 **「循序 (Sequential)」** 寫入 1GB 壓力測試。
+
+* **Monkey 追蹤器與系統 App 抓取**
+* 新增 `Include System Apps` 選項，可將系統原生 App (如相機、設定) 納入 Monkey 測試範圍。
+* **指令追蹤**：UI 與 Log 會精準印出每一次 `adb shell monkey...` 的實際執行參數。
+* **即時串流**：Monkey 執行的 Log 會即時回傳至 UI，並高亮標示 `CRASH` 與 `ANR` 崩潰事件。
+
+* **YouTube 全螢幕自動化**
+* 針對 Video Streaming，自動注入按鍵事件 (模擬按 `F` 鍵)，強制觸發 YouTube 全螢幕播放。
+
+### 📝 日誌與介面優化 (Logging & UI Improvements)
+* **智慧 Log 命名機制**：生成的 Log 檔名會根據測試類型，自動在結尾加上 `_Cycle` (圈數) 或 `_Mins` (分鐘數) 的單位標籤，方便後續 QA 追蹤。
+* **OOM 測試防呆**：優化了 Fake OOM 的容量計算邏輯，防止 `dd` 指令生成過大暫存檔導致系統 RAM 溢出崩潰。
+
+### ⚠️ [IMPORTANT PREREQUISITE]
+**Before starting any tests, please ensure that the latest `TPM_OSD.apk` (v7.0) is placed in the exact same directory as the Python script, and we highly recommend manually installing it on the test device first.** If this APK is missing, the newly integrated OSD Watermark system and the double-wake mechanism (designed to prevent background app killing) will fail to function!
+
+### 🌟 Major Features
+* **New OSD Watermark System (v7.0 APK Integration)**
+* Real-time display of "Device Serial, IP Address, and Current Test" directly on the device screen.
+* **Ultimate LineBreak Fix**: Introduced a custom `||` delimiter mechanism to completely bypass the Escape Character conflicts between Windows CMD and Android Shell, achieving perfect multi-line formatting with enlarged fonts.
+
+* **Smart Dashboard & Quick Connect Module**
+* Added the **Executive Dashboard** to monitor connected devices and active tests in real time.
+* Supported **Local Subnet Scan** and 1-click **USB TCP/IP (Port 5555) Initialization**.
+
+### 🛡️ System Compatibility & Stability
+* **Full Support for Android 14 / 15 / 16 Security Restrictions**
+* **Bypass Background Execution Limits (BAL)**: Implemented a "Trampoline Activity" double-wake mechanism to bypass the OS blockade on background service launches.
+* **Bypass Broadcast Restrictions**: Added `RECEIVER_EXPORTED` flags and targeted intents (`-p`) to prevent broadcasts from being silently dropped by the Android security subsystem.
+* **Doze Mode Whitelist**: Automatically whitelists the OSD service via `dumpsys deviceidle` to prevent background tasks from being killed during long-term testing.
+
+### 🛠️ Testing Module Enhancements
+* **Advanced Storage I/O (NVMe/UFS) Dashboard**
+* Dynamically fetches all actual read/write-capable storage mount paths on the device.
+* Supports multi-path selection with toggleable **Concurrent** or **Sequential** 1GB I/O Stress Testing.
+
+* **Monkey Tracker & System Apps Integration**
+* Added `Include System Apps` checkbox to inject native system applications (e.g., Camera, Settings) into the Monkey target list.
+* **Command Tracking**: Prints the exact executed `adb shell monkey...` command syntax to the UI and Logs.
+* **Live Log Streaming**: Real-time streaming of Monkey logs to the console, specifically highlighting `CRASH` and `ANR` events.
+
+* **YouTube Fullscreen Automation**
+* Automatically injects key events (simulating the `F` keypress) to force YouTube playback into full-screen mode during Video Streaming Stress.
+
 🚀 Android ADB Stress Test Console - 完整發布日誌 (v3.9.5 - v3.9.11)
 [Latest Build] v3.9.11 — Pre-flight Check & Flag Verifier Update
 •	🇹🇼 中文更新說明：
