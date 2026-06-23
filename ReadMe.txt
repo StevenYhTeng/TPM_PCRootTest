@@ -1,4 +1,110 @@
 🚀 Release Notes (版本更新日誌)
+🚀 Release Notes: ADB Stress Test Console (v3.9.29 ➔ v4.0.4)
+🇹🇼 中文版 (Chinese Version)
+⚠️ 【重要測試前置作業】
+在開始進行任何測試之前，請務必確認最新版（v7.0）的 TPM_OSD.apk 已與 Python 執行檔放置於同一個資料夾，並強烈建議「手動安裝」至測試設備中一次。若未安裝此 APK，最新導入的 OSD 浮水印系統與防止系統殺後台的雙重喚醒機制將無法正常運作。
+
+🌟 重大功能更新 (Major Features)
+全新企業級 APM 核心測試模組 (APM Suites)
+
+完美對接商業級壓力測試規範，新增包含「系統重啟與關機、連線切換 (WiFi/BT/飛航)、資料讀寫 (網頁下載)、燒機測試 (影片串流)、電源與顯示 (喚醒與亮度)、相機與媒體壓測」等 6 大 APM 綜合場景。
+
+Monkey 系統 App 黑名單防呆機制 (System Apps Blacklist)
+
+執行 Monkey 壓測前，腳本會自動掃描設備中所有的系統 App，並跳出「確認對話框」供測試人員檢閱。
+
+確認後自動生成並推送黑名單檔案 (--pkg-blacklist-file)，確保 Monkey 絕對不會誤觸設定、電話等核心系統功能導致測試中斷。
+
+🛠️ 測試模組大幅擴充 (Testing Module Enhancements)
+📷 相機與媒體 (Camera & Media)
+
+前後鏡頭與錄影: 自動切換前鏡頭連拍 2 張照片，接著切換至後鏡頭錄影 5 秒。
+
+百連拍測試: 模擬長按相機快門，連續高頻觸發 100 張照片拍攝。
+
+儲存空間切換: 模擬修改系統屬性，在內部儲存與外部記憶體 (SD Card) 之間反覆切換並執行拍攝。
+
+🎵 音訊與播放 (Audio Playback)
+
+播放控制壓力: 模擬真實情境，包含播放、上下首切換、音量極值 (Max/Min) 切換、暫停與進度條拖曳。
+
+背景播放與鎖屏: 啟動音樂背景播放後鎖定螢幕 (Standby 2 分鐘)，嚴格驗證後續的喚醒解鎖與音訊中斷/恢復情況。
+
+🌐 網路與下載 (Network & Download)
+
+WiFi 智慧併發下載: 執行下載前自動偵測 WiFi 狀態，未連線將直接報錯阻擋。支援自訂併發數，進行多檔小型 (<100MB) 或大型 (>200MB) 檔案同時下載測試。
+
+⚡ 系統與效能 (System & Performance)
+
+動態亮度切換: 隨機生成亮度值 (10~255) 並頻繁切換，測試 Display HAL 與背光模組壽命。
+
+一鍵清理與多工作業: 瞬間啟動超過 10 個第三方/系統 App 至背景，呼叫近期任務 (Recents) 並執行一鍵清理 (kill-all)，後續進行 Ping 測試檢查系統是否發生畫面凍結 (Freeze)。
+
+本機檔案複製: 支援自訂 Source/Dest 路徑，高壓複製檔案/資料夾並於驗證後自動清理。
+
+APK 批次安裝: 指定本機資料夾，腳本將依序自動讀取並安裝所有 APK 檔案，遇錯自動停止並記錄 Log。
+
+🐛 介面優化與錯誤修正 (UI Improvements & Bug Fixes)
+全新純英文分類選單與防選機制 (v4.0.4):
+
+重新梳理下拉式選單，全面去除中文，改用純英文的四大直覺分類（如 --- 📷 Camera & Media ---）。
+
+導入防呆退回機制：當使用者不小心點選到 --- 開頭的分類分隔線時，系統會自動退回上一次選擇的有效測試項目，完全防止誤選報錯。
+
+Target Cycles 鎖死修正: 修復了因測試名稱包含 "Video" 單字導致目標圈數 (Target Cycles) 被誤判並反灰鎖死的字串比對 Bug。
+
+🇺🇸 英文版 (English Version)
+⚠️ [IMPORTANT PREREQUISITE]
+Before starting any tests, please ensure that the latest TPM_OSD.apk (v7.0) is placed in the exact same directory as the Python script, and we highly recommend manually installing it on the test device first. If this APK is missing, the OSD Watermark system and the double-wake mechanism will fail to function properly.
+
+🌟 Major Features
+New Enterprise APM Core Test Suites
+
+Perfectly aligned with commercial stress testing specifications. Introduced 6 major APM scenarios: System Restart & Shutdown, Connectivity Toggle (WiFi/BT/Airplane), Data I/O (Browser Download), Burn-in (Video Streaming), Power & Display (Wake-up & Brightness), and Camera & Media Stress.
+
+Monkey System Apps Blacklist Failsafe
+
+Introduced an interception mechanism before Monkey tests. The script automatically scans all system apps on the device and prompts a confirmation dialog.
+
+Once confirmed, it generates and pushes a --pkg-blacklist-file to the device, ensuring the Monkey test strictly avoids touching critical system functionalities (e.g., Settings, Dialer).
+
+🛠️ Testing Module Massive Expansion
+📷 Camera & Media
+
+Front/Rear & Video: Automatically switches to the front camera to take 2 photos, then switches to the rear camera for a 5-second video recording.
+
+Continuous Shooting: Simulates holding the shutter button to trigger a 100-shot high-speed continuous burst.
+
+Storage Switch: Simulates changing system properties to alternate camera save locations between Internal Storage and External Memory (SD Card) followed by image captures.
+
+🎵 Audio Playback
+
+Playback & Controls Stress: Simulates real-user behaviors including play, next/previous track, min/max volume toggle, pause, and progress bar seeking.
+
+Background Play & Lock: Plays music in the background, locks the screen (Standby for 2 minutes), and strictly verifies wake/unlock stability and audio continuity.
+
+🌐 Network & Download
+
+Smart WiFi Concurrent Downloads: Auto-verifies WiFi connectivity before execution (blocks if disconnected). Supports concurrent downloading of multiple small (<100MB) or large (>200MB) files with customizable thread counts.
+
+⚡ System & Performance
+
+Random Brightness Toggle: Rapidly switches display brightness to random levels (10~255) to stress the Display HAL and backlight module.
+
+Multi-App & One-Click Clean: Launches 10+ apps into the background, triggers the Recents menu, performs a simulated one-click clean (kill-all), and runs an immediate Ping test to check for system freeze.
+
+Local File Copy: High-stress file/folder duplication between user-defined Source and Destination paths with post-check auto-cleanup.
+
+Batch APK Installation: Automatically reads and sequentially installs all APK files from a designated local PC folder, logging any failures immediately.
+
+🐛 UI Improvements & Bug Fixes
+English-Only Categorized Menu & Selection Failsafe (v4.0.4):
+
+Reorganized the dropdown menu into 4 intuitive, English-only categories (e.g., --- 📷 Camera & Media ---).
+
+Implemented an auto-revert failsafe: If a user accidentally selects a --- category separator, the UI immediately reverts to the last valid test selection, preventing execution errors.
+
+Target Cycles Input Fix: Fixed a substring-matching bug where tests containing the word "Video" falsely disabled and grayed out the Target Cycles input box.
 # 🚀 Release Notes: ADB Stress Test Console (v3.9.11 ➔ v3.9.29)
 ### ⚠️ 【重要測試前置作業】
 **在開始進行任何測試之前，請務必確認最新版（v7.0）的 `TPM_OSD.apk` 已與 Python 執行檔放置於同一個資料夾，並強烈建議「手動安裝」至測試設備中一次**。若未安裝此 APK，最新導入的 OSD 浮水印系統與防止系統殺後台的雙重喚醒機制將無法正常運作！
