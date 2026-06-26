@@ -1,5 +1,122 @@
 🚀 Release Notes (版本更新日誌)
-🚀 Release Notes: ADB Stress Test Console (v3.9.29 ➔ v4.0.4)
+🚀 Release Notes: ADB Stress Test Console (v4.0.4 ➔ v4.0.18)
+🇹🇼 中文版 (Chinese Version)
+🌟 新功能 (New Features)
+🎵 音訊自動化測試全面升級 (Audio Automation Upgrade)
+
+自訂音檔與自動派送：新增 Audio 測試專屬面板，允許 QA 選擇電腦本機端的音訊檔 (.mp3/.wav)，腳本會自動 Push 至手機指定目錄。
+
+導入原生播放引擎：全面捨棄容易卡畫面的 UI 播放器，改用語法直接呼叫 Android 底層開發者專用的 stagefright 媒體引擎，完美繞過 Android 10+ 的檔案安全限制，確保每次測試 100% 成功發聲。
+
+📡 WiFi 智慧掃描與自動連線 (Smart WiFi Scanner)
+
+在 WiFi 下載測試模組中加入 🔍 Scan AP 功能。點擊後能即時掃描設備周圍的 WiFi 訊號、自動編號排序，並支援密碼輸入。測試開始前會確保設備成功連線後再進行高壓下載。
+
+🎛️ APM 連線測試細部勾選 (Selective APM Toggles)
+
+針對 [APM] Connectivity Toggle 新增控制面板。QA 現在可以自由勾選/取消勾選 WiFi、藍牙、飛航模式，系統只會針對「有勾選」的硬體進行循環開關壓測。
+
+🛡️ Chrome 歡迎畫面自動繞過 (Chrome FRE Bypass)
+
+[APM] Data I/O (Browser Download) 加入自動繞過機制。在啟動 Chrome 前注入底層參數，直接跳過第一次開機的「歡迎使用 / 同步帳號」畫面，徹底解決測試卡住需要人工點擊的問題。
+
+🐛 修正問題與優化 (Bug Fixes & Improvements)
+🛑 重啟壓測終極防呆驗證 (Ultimate Reboot Verification) [v4.0.18]
+
+完全重寫 [APM] System Restart 邏輯。新增三階段嚴格驗證：
+
+斷線確認：持續 Ping 直到設備真正離線（抓出死機 Hang up）。
+
+動畫結束確認：讀取 init.svc.bootanim 確認開機動畫已跑完。
+
+UI 渲染確認：讀取 Window Manager 確保桌面完全繪製成功，才發送下一次 Reboot 指令。徹底根除「手機還沒開好就重啟」導致的死機與假 Pass 問題。
+
+⚙️ 多執行緒競爭條件修復 (Race-Condition Fix)
+
+分離了「運行鎖定」與「停止訊號」的變數。解決了「前一個測試正在背景花時間抓取 Bugreport 時，啟動新測試會導致新測試跑一圈就自動停止」的嚴重邏輯衝突。
+
+🏢 企業管理框架 (MDM) 全系列修復
+
+修復 no_add_managed_profile：測試前自動偵測並清除上一圈殘留的 Device Owner，解鎖權限衝突。
+
+修復 Unknown admin 崩潰：使用 pm install-existing 確保 MDM APK 正確被安裝進新建的「工作空間 (Work Profile)」沙盒內。
+
+修復 MDM 測試秒 Pass 問題：修正因未被納入 Monkey 黑名單變數範圍，導致 for 迴圈被跳過、測試 0 圈就顯示 PASS 的判斷式錯誤。
+
+✅ User Build 全面相容 (100% User Build Compatibility)
+
+全面移除所有會引發 SELinux 權限阻擋的 adb root 與 su 指令，確保測試工具能在完全沒有 Root 的一般消費機 (User Build) 上穩定運行。
+
+🛠️ 漏跑測試項目補回 (Restored Execution Loops)
+
+修正前版架構合併時遺漏的執行區塊。將所有獨立硬體測試 (Standalone WiFi/BT/Mic/Fingerprint) 及部分 APM (Power/Camera) 加回執行迴圈，解決「點選後一圈都沒跑直接 Pass」的漏洞。
+
+💡 動態亮度盲測真實化 (True Random Brightness)
+
+Power & Display 的亮度測試從「固定最大與最小」，改為真正的 random 隨機取值 (10~255)，更真實地還原使用者操作邊界。
+
+🗑️ 移除無效的 LED 測試 (Removed Invalid LED Tests)
+
+經實驗證明，User Build 下的特規 NFC LED 完全受到 OEM 硬體層封鎖，無法透過標準 ADB 點亮。為避免產出無效測試數據，已將該模組從介面中移除。
+
+🇺🇸 英文版 (English Version)
+🌟 New Features
+🎵 Audio Automation Upgrade
+
+Custom Audio & Auto-Push: Added a dedicated Audio test panel allowing QAs to select a local PC audio file (.mp3/.wav). The tool automatically pushes the file to the target device.
+
+Native Playback Engine: Replaced UI-based music players with Android's native developer media engine (stagefright). This perfectly bypasses Android 10+ URI exposure limits, ensuring 100% reliable audio playback without UI interruptions.
+
+📡 Smart WiFi Scanner & Auto-Connect
+
+Introduced a 🔍 Scan AP UI in the WiFi Download module. It instantly scans nearby networks, auto-numbers them, and accepts password inputs to automatically connect the device to the internet before extreme download tests.
+
+🎛️ Selective APM Connectivity Toggles
+
+Added a control panel for [APM] Connectivity Toggle. QAs can now independently check/uncheck WiFi, Bluetooth, or Airplane mode. The script will dynamically run stress tests only on the enabled components.
+
+🛡️ Chrome First-Run Experience (FRE) Bypass
+
+The [APM] Data I/O test now automatically injects command-line flags to skip the Chrome "Welcome/Sync" screens entirely. This prevents the automation script from hanging on newly flashed devices.
+
+🐛 Bug Fixes & Improvements
+🛑 Ultimate Reboot Verification System [v4.0.18]
+
+Completely rewrote the [APM] System Restart logic with a strict 3-stage validation process:
+
+Offline Confirmation: Continuously Pings until the device is truly offline (catches Hang ups).
+
+Boot Animation Check: Polls init.svc.bootanim to ensure the boot animation has stopped.
+
+UI Render Check: Verifies Window Manager to ensure the home screen is fully rendered before issuing the next reboot command. This completely eliminates "Fake Passes" and device crashing caused by overlapping reboots.
+
+⚙️ Race-Condition & Threading Fix
+
+Separated "Run Lock" and "Stop Event" variables. Fixed a critical threading bug where starting a new test while a previous bugreport was still generating in the background caused the new test to abort after just 1 cycle.
+
+🏢 Comprehensive MDM Framework Fixes
+
+Fixed no_add_managed_profile: Automatically detects and clears lingering Device Owners from previous cycles to prevent permission locking.
+
+Fixed Unknown admin Crash: Utilizes pm install-existing to properly inject the MDM APK into the newly sandboxed "Work Profile."
+
+Fixed Zero-Cycle Pass Bug: Resolved a logic error where MDM tests would instantly pass without running any cycles due to a variable conflict with Monkey blacklists.
+
+✅ 100% User Build Compatibility
+
+Removed all adb root and su commands that triggered SELinux permission blocks. This guarantees absolute stability on standard, non-rooted consumer devices (User Builds).
+
+🛠️ Restored Missing Execution Loops
+
+Fixed an oversight from a previous code merge. Re-added missing standalone hardware tests (WiFi/BT/Mic/Fingerprint) and APM modules (Power/Camera) to the main execution loop, fixing the issue where they stopped without running a single cycle.
+
+💡 True Random Brightness Toggle
+
+Updated the Power & Display stress test to generate genuinely randomized brightness values (10~255) on every cycle instead of fixed max/min values, simulating real-world edge cases.
+
+🗑️ Removed Invalid LED Tests
+
+Confirmed that NFC LEDs on User Builds are strictly locked by OEM hardware abstraction layers and cannot be triggered via standard ADB. The LED testing module has been removed to prevent the generation of invalid test results.🚀 Release Notes: ADB Stress Test Console (v3.9.29 ➔ v4.0.4)
 🇹🇼 中文版 (Chinese Version)
 ⚠️ 【重要測試前置作業】
 在開始進行任何測試之前，請務必確認最新版（v7.0）的 TPM_OSD.apk 已與 Python 執行檔放置於同一個資料夾，並強烈建議「手動安裝」至測試設備中一次。若未安裝此 APK，最新導入的 OSD 浮水印系統與防止系統殺後台的雙重喚醒機制將無法正常運作。

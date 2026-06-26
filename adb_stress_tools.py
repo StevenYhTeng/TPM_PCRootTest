@@ -9,6 +9,9 @@ import threading
 import subprocess
 import urllib.request
 import concurrent.futures
+import wave
+import struct
+import math
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, filedialog
 
@@ -19,20 +22,14 @@ ES_CONTINUOUS = 0x80000000
 ES_SYSTEM_REQUIRED = 0x00000001
 
 def prevent_system_sleep():
-    """Tells Windows to prevent the system from entering sleep mode."""
     if os.name == 'nt':
-        try:
-            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
-        except Exception:
-            pass
+        try: ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+        except Exception: pass
 
 def allow_system_sleep():
-    """Reverts the execution state, allowing Windows to sleep normally."""
     if os.name == 'nt':
-        try:
-            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
-        except Exception:
-            pass
+        try: ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+        except Exception: pass
 
 def get_cflags():
     if os.name == 'nt':
@@ -48,18 +45,17 @@ os.makedirs(LOG_DIR, exist_ok=True)
 class ADBStressGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Android ADB Stress Test Console v4.0.4")
+        self.root.title("Android ADB Stress Test Console v4.0.18")
         self.root.geometry("1150x980")
         
-        try:
-            self.root.iconbitmap("app_icon.ico")
-        except Exception:
-            pass
+        try: self.root.iconbitmap("app_icon.ico")
+        except Exception: pass
             
         prevent_system_sleep()
         self.check_gdpr_consent()
         
         self.device_testing_state = {} 
+        self.device_stop_event = {}     
         self.devices_status = {}       
         self.logcat_procs = {}
         self.monkey_procs = {}
@@ -96,8 +92,7 @@ class ADBStressGUI:
             s.close()
             parts = local_ip.split('.')
             subnets.add(f"{parts[0]}.{parts[1]}.{parts[2]}.")
-        except Exception:
-            pass
+        except Exception: pass
             
         try:
             hostname = socket.gethostname()
@@ -106,11 +101,9 @@ class ADBStressGUI:
                 if not ip.startswith("127.") and not ip.startswith("169.254."):
                     parts = ip.split('.')
                     subnets.add(f"{parts[0]}.{parts[1]}.{parts[2]}.")
-        except Exception:
-            pass
+        except Exception: pass
             
-        if not subnets:
-            return "192.168.1."
+        if not subnets: return "192.168.1."
         return ", ".join(list(subnets))
 
     def setup_ui(self):
@@ -130,15 +123,11 @@ class ADBStressGUI:
         self.btn_open_logs = tk.Button(self.btn_frame, text="📁 Open Logs", font=("Arial", 12), bg="#2196F3", fg="white", command=self.open_logs)
         self.btn_open_logs.pack(fill=tk.X)
 
-        # Scrolling Canvas for Settings
         canvas = tk.Canvas(left_container)
         scrollbar = ttk.Scrollbar(left_container, orient="vertical", command=canvas.yview)
         control_frame = tk.Frame(canvas)
 
-        control_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        control_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
         canvas.create_window((0, 0), window=control_frame, anchor="nw", width=400)
         canvas.configure(yscrollcommand=scrollbar.set)
@@ -196,7 +185,6 @@ class ADBStressGUI:
         self.test_type_var = tk.StringVar(value="[APM] System Restart & Shutdown Stress")
         self.last_valid_test = self.test_type_var.get()
         
-        # 🌟 去除中文分隔線，並加入防止選擇機制
         test_options = [
             "--- 🚀 APM Core Test Suites ---",
             "[APM] System Restart & Shutdown Stress",
@@ -274,6 +262,27 @@ class ADBStressGUI:
         self.entry_reboot_down = tk.Entry(self.reboot_frame, font=("Arial", 10))
         self.entry_reboot_down.insert(0, "30")
         self.entry_reboot_down.pack(fill=tk.X)
+        
+        self.apm_conn_frame = tk.LabelFrame(control_frame, text="Connectivity Toggle Settings", padx=10, pady=10)
+        self.apm_wifi_var = tk.BooleanVar(value=True)
+        self.apm_bt_var = tk.BooleanVar(value=True)
+        self.apm_air_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(self.apm_conn_frame, text="Toggle WiFi", variable=self.apm_wifi_var).pack(side=tk.LEFT, padx=5)
+        tk.Checkbutton(self.apm_conn_frame, text="Toggle Bluetooth", variable=self.apm_bt_var).pack(side=tk.LEFT, padx=5)
+        tk.Checkbutton(self.apm_conn_frame, text="Toggle Airplane Mode", variable=self.apm_air_var).pack(side=tk.LEFT, padx=5)
+        
+        self.audio_frame = tk.LabelFrame(control_frame, text="Audio Test Settings", padx=10, pady=10)
+        af1 = tk.Frame(self.audio_frame); af1.pack(fill=tk.X, pady=2)
+        tk.Label(af1, text="Local Audio File:").pack(side=tk.LEFT)
+        self.entry_audio_local = tk.Entry(af1, font=("Arial", 10))
+        self.entry_audio_local.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        tk.Button(af1, text="Browse", command=self.browse_audio_file).pack(side=tk.RIGHT)
+        
+        af2 = tk.Frame(self.audio_frame); af2.pack(fill=tk.X, pady=(5,0))
+        tk.Label(af2, text="Device Dest Path:").pack(side=tk.LEFT)
+        self.entry_audio_remote = tk.Entry(af2, font=("Arial", 10))
+        self.entry_audio_remote.insert(0, "/sdcard/Music/test_audio.mp3")
+        self.entry_audio_remote.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
         self.mdm_frame = tk.LabelFrame(control_frame, text="MDM Test Settings & Provisioning", padx=10, pady=10)
         self.install_mdm_var = tk.BooleanVar(value=True)
@@ -282,7 +291,7 @@ class ADBStressGUI:
         self.entry_mdm_apk = tk.Entry(mf, font=("Arial", 10)); self.entry_mdm_apk.insert(0, "mdm_test.apk"); self.entry_mdm_apk.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         tk.Button(mf, text="Browse", command=self.browse_mdm_apk).pack(side=tk.RIGHT)
         self.set_owner_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(self.mdm_frame, text="👑 Set Device Owner & Grant Permissions", variable=self.set_owner_var).pack(anchor=tk.W)
+        tk.Checkbutton(self.mdm_frame, text="👑 Set MDM Owner (Profile/Device) & Grant Permissions", variable=self.set_owner_var).pack(anchor=tk.W)
         self.entry_mdm_comp = tk.Entry(self.mdm_frame, font=("Arial", 10)); self.entry_mdm_comp.insert(0, "com.mdm.client/.MyDeviceAdminReceiver"); self.entry_mdm_comp.pack(fill=tk.X)
 
         self.oom_frame = tk.LabelFrame(control_frame, text="OOM Storage Fill Settings", padx=10, pady=10)
@@ -328,6 +337,20 @@ class ADBStressGUI:
         self.entry_wifi_dl_concurrent = tk.Entry(self.wifi_dl_frame, font=("Arial", 10))
         self.entry_wifi_dl_concurrent.insert(0, "5")
         self.entry_wifi_dl_concurrent.pack(fill=tk.X, pady=(0, 5))
+        
+        tk.Label(self.wifi_dl_frame, text="--- Auto Connect WiFi (Optional) ---", fg="grey", font=("Arial", 8)).pack(pady=(5,0))
+        wf1 = tk.Frame(self.wifi_dl_frame)
+        wf1.pack(fill=tk.X, pady=2)
+        tk.Label(wf1, text="SSID:", width=5, anchor="e").pack(side=tk.LEFT)
+        self.entry_wifi_ssid = tk.Entry(wf1, font=("Arial", 10))
+        self.entry_wifi_ssid.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        
+        wf2 = tk.Frame(self.wifi_dl_frame)
+        wf2.pack(fill=tk.X, pady=2)
+        tk.Label(wf2, text="PWD:", width=5, anchor="e").pack(side=tk.LEFT)
+        self.entry_wifi_pwd = tk.Entry(wf2, font=("Arial", 10))
+        self.entry_wifi_pwd.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        tk.Button(wf2, text="🔍 Scan AP", command=self.scan_wifi_ui, font=("Arial", 8)).pack(side=tk.RIGHT)
 
         self.copy_frame = tk.LabelFrame(control_frame, text="Local File Copy Settings", padx=10, pady=10)
         tk.Label(self.copy_frame, text="Source File/Directory (e.g. /sdcard/DCIM):", font=("Arial", 9)).pack(anchor=tk.W)
@@ -361,7 +384,6 @@ class ADBStressGUI:
         tk.Checkbutton(self.app_frame, text="Ignore Crash (Monkey & OOM)", variable=self.ignore_crash_var).pack(anchor=tk.W)
         self.ignore_anr_var = tk.BooleanVar(value=True)
         tk.Checkbutton(self.app_frame, text="Ignore ANR / Timeouts (Monkey & OOM)", variable=self.ignore_anr_var).pack(anchor=tk.W)
-        
         self.skip_sys_apps_var = tk.BooleanVar(value=False)
         self.chk_skip_sys_apps = tk.Checkbutton(self.app_frame, text="Skip System Apps during Monkey (Blacklist)", variable=self.skip_sys_apps_var, fg="#D32F2F", font=("Arial", 9, "bold"))
         self.chk_skip_sys_apps.pack(anchor=tk.W, pady=(5, 0))
@@ -453,6 +475,85 @@ class ADBStressGUI:
         self.root.after(500, self.auto_connect_subnet)
         
         self.update_dashboard_stats()
+
+    def browse_audio_file(self):
+        path = filedialog.askopenfilename(title="Select Audio File", filetypes=[("Audio Files", "*.mp3 *.wav *.ogg *.m4a"), ("All Files", "*.*")])
+        if path:
+            self.entry_audio_local.delete(0, tk.END)
+            self.entry_audio_local.insert(0, path)
+
+    def scan_wifi_ui(self):
+        selections = self.device_listbox.curselection()
+        if not selections:
+            return messagebox.showwarning("Warning", "Select at least one device from the Dashboard first!")
+        target_serial = self._get_serial_from_listbox_text(self.device_listbox.get(selections[0]))
+
+        top = tk.Toplevel(self.root)
+        top.title("Select WiFi AP")
+        top.geometry("380x450")
+        tk.Label(top, text="Select network to auto-connect:", font=("Arial", 10)).pack(pady=5)
+        
+        lbl_status = tk.Label(top, text="Scanning...", fg="blue", font=("Arial", 9))
+        lbl_status.pack()
+
+        lb = tk.Listbox(top, font=("Arial", 11))
+        lb.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        def confirm():
+            sel = lb.curselection()
+            if sel:
+                val = lb.get(sel[0])
+                if ". " in val:
+                    val = val.split(". ", 1)[1]
+                self.entry_wifi_ssid.delete(0, tk.END)
+                self.entry_wifi_ssid.insert(0, val)
+            top.destroy()
+
+        def trigger_scan():
+            lb.delete(0, tk.END)
+            lbl_status.config(text="Scanning nearby APs...", fg="blue")
+            btn_scan.config(state=tk.DISABLED)
+            btn_confirm.config(state=tk.DISABLED)
+            self.ui_log(f"🔄 Scanning nearby WiFi APs from device [{target_serial}]...")
+            threading.Thread(target=self._bg_scan_wifi, args=(target_serial, top, lb, lbl_status, btn_scan, btn_confirm), daemon=True).start()
+
+        btn_f = tk.Frame(top)
+        btn_f.pack(fill=tk.X, padx=10, pady=10)
+
+        btn_scan = tk.Button(btn_f, text="🔄 Scan Again", command=trigger_scan, font=("Arial", 10))
+        btn_scan.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 5))
+
+        btn_confirm = tk.Button(btn_f, text="Confirm", command=confirm, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
+        btn_confirm.pack(side=tk.RIGHT, expand=True, fill=tk.X, padx=(5, 0))
+
+        trigger_scan()
+
+    def _bg_scan_wifi(self, serial, top, lb, lbl_status, btn_scan, btn_confirm):
+        self.run_adb(["shell", "cmd", "wifi", "start-scan"], serial=serial)
+        time.sleep(2)
+        out = self.run_adb(["shell", "cmd", "wifi", "list-scan-results"], serial=serial)
+        ssids = []
+        for line in out.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 5:
+                ssid = " ".join(parts[4:])
+                if ssid and ssid not in ssids:
+                    ssids.append(ssid)
+
+        def _update_ui():
+            if not tk.Toplevel.winfo_exists(top): return 
+            lb.delete(0, tk.END)
+            if not ssids:
+                lbl_status.config(text="No WiFi APs found. (Check WiFi state)", fg="red")
+            else:
+                lbl_status.config(text=f"Found {len(ssids)} APs.", fg="green")
+                for idx, s in enumerate(ssids, 1):
+                    lb.insert(tk.END, f"{idx}. {s}")
+            
+            btn_scan.config(state=tk.NORMAL)
+            btn_confirm.config(state=tk.NORMAL)
+
+        self.root.after(0, _update_ui)
 
     def on_vid_preset_changed(self, event):
         selected = self.combo_vid_preset.get()
@@ -637,23 +738,33 @@ class ADBStressGUI:
         active_tests = any(self.device_testing_state.values())
         if active_tests: self.ui_log("⚠️ App close requested. Force cleaning up devices before exit...")
         for serial in list(self.devices_status.keys()):
-            self.device_testing_state[serial] = False
-            threading.Thread(target=self._cleanup_device_force, args=(serial,), daemon=True).start()
+            self.device_stop_event[serial] = True
         time.sleep(1 if active_tests else 0.2)
         allow_system_sleep()
         self.root.destroy()
 
     def _cleanup_device_force(self, serial):
         self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=serial, capture=False)
+        self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
         self.run_adb(["shell", "killall", "tinycap"], serial=serial, capture=False)
         self.run_adb(["shell", "killall", "curl"], serial=serial, capture=False)
         self.run_adb(["shell", "killall", "wget"], serial=serial, capture=False)
         self.run_adb(["shell", "killall", "dd"], serial=serial, capture=False)
         self.run_adb(["shell", "rm", "-f", "/data/local/tmp/oom_fill*"], serial=serial, capture=False) 
+        
+        self.run_adb(["shell", "am", "force-stop", "com.android.chrome"], serial=serial, capture=False)
+        
         dl_file = self.entry_dl_file.get().strip()
         if dl_file:
             base_name = os.path.splitext(dl_file)[0]
             self.run_adb(["shell", "rm", "-f", f"/sdcard/Download/{base_name}*"], serial=serial, capture=False)
+            
+        try:
+            audio_remote = self.entry_audio_remote.get().strip()
+            if audio_remote:
+                self.run_adb(["shell", "rm", "-f", audio_remote], serial=serial, capture=False)
+        except: pass
+
         try:
             out = self.run_adb(["shell", "pm", "list", "users"], serial=serial, capture=True)
             for line in out.splitlines():
@@ -661,7 +772,6 @@ class ADBStressGUI:
                     uid = line.split("{")[1].split(":")[0]
                     self.run_adb(["shell", "pm", "remove-user", uid], serial=serial, capture=False)
         except: pass
-        self.run_adb(["shell", "am", "force-stop", "com.android.chrome"], serial=serial, capture=False)
         self.run_adb(["shell", "am", "force-stop", "com.tpm.osd"], serial=serial, capture=False)
 
     def refresh_devices(self, auto_recover=True):
@@ -681,6 +791,7 @@ class ADBStressGUI:
                     if serial not in self.devices_status:
                         self.devices_status[serial] = "Idle"
                         self.device_testing_state[serial] = False
+                        self.device_stop_event[serial] = False
             keys_to_remove = [s for s in self.devices_status if s not in current_serials]
             for s in keys_to_remove:
                 if self.device_testing_state.get(s, False):
@@ -688,6 +799,7 @@ class ADBStressGUI:
                 else:
                     del self.devices_status[s]
                     if s in self.device_testing_state: del self.device_testing_state[s]
+                    if s in self.device_stop_event: del self.device_stop_event[s]
             self.update_listbox_display()
             if not current_serials:
                 self.device_listbox.insert(tk.END, "No devices found")
@@ -729,14 +841,13 @@ class ADBStressGUI:
     def on_test_type_changed(self, event):
         t = self.test_type_var.get()
         
-        # 🌟 防止使用者選取到分隔線 (如果選到分隔線，退回上一個有效選項)
         if t.startswith("---"):
             self.test_type_var.set(getattr(self, "last_valid_test", "[APM] System Restart & Shutdown Stress"))
             t = self.test_type_var.get()
         else:
             self.last_valid_test = t
             
-        for f in [self.dl_frame, self.app_frame, self.screen_frame, self.oom_frame, self.reboot_frame, self.mdm_frame, self.video_frame, self.storage_frame, self.wifi_dl_frame, self.copy_frame, self.apk_install_frame]: 
+        for f in [self.dl_frame, self.app_frame, self.screen_frame, self.oom_frame, self.reboot_frame, self.mdm_frame, self.video_frame, self.storage_frame, self.wifi_dl_frame, self.copy_frame, self.apk_install_frame, self.apm_conn_frame, self.audio_frame]: 
             f.pack_forget()
 
         if t in ["Video Streaming Stress Test", "[APM] Burn-in (Video Streaming)"]:
@@ -750,6 +861,8 @@ class ADBStressGUI:
         if "Restart" in t or "Reboot" in t: self.reboot_frame.pack(fill=tk.X, pady=(0, 10))
         if "MDM" in t: self.mdm_frame.pack(fill=tk.X, pady=(0, 10))
         if "Storage I/O" in t: self.storage_frame.pack(fill=tk.X, pady=(0, 10))
+        if "Audio" in t: self.audio_frame.pack(fill=tk.X, pady=(0, 10))
+        if "[APM] Connectivity" in t: self.apm_conn_frame.pack(fill=tk.X, pady=(0, 10))
         
         if "Download Multiple" in t or "Download Large" in t:
             self.wifi_dl_frame.pack(fill=tk.X, pady=(0, 10))
@@ -882,7 +995,6 @@ class ADBStressGUI:
         selections = self.device_listbox.curselection()
         test_type = self.test_type_var.get()
         
-        # Double check just in case "---" slipped through
         if test_type.startswith("---"):
             messagebox.showwarning("Invalid Selection", "This is a category separator. Please select an actual test from the list.")
             return
@@ -914,10 +1026,21 @@ class ADBStressGUI:
             "storage_paths": self.entry_storage_paths.get().strip(),
             "concurrent_io": self.concurrent_io_var.get(),
             "wifi_dl_concurrent": self.entry_wifi_dl_concurrent.get().strip(),
+            "wifi_ssid": self.entry_wifi_ssid.get().strip(),
+            "wifi_pwd": self.entry_wifi_pwd.get().strip(),
             "copy_src": self.entry_copy_src.get().strip(),
             "copy_dest": self.entry_copy_dest.get().strip(),
-            "apk_folder": self.entry_apk_folder.get().strip()
+            "apk_folder": self.entry_apk_folder.get().strip(),
+            "apm_wifi": self.apm_wifi_var.get(),
+            "apm_bt": self.apm_bt_var.get(),
+            "apm_air": self.apm_air_var.get(),
+            "audio_local_path": self.entry_audio_local.get().strip(),
+            "audio_remote_path": self.entry_audio_remote.get().strip()
         }
+        
+        if "Audio" in test_type:
+            if not kwargs["audio_local_path"] or not os.path.exists(kwargs["audio_local_path"]):
+                return messagebox.showerror("Error", "Please select a valid local Audio file for playback testing!")
         
         system_apps_list = []
         if ("Monkey" in test_type or "OOM" in test_type) and self.skip_sys_apps_var.get():
@@ -975,7 +1098,7 @@ class ADBStressGUI:
         
         if "MDM" in test_type:
             if kwargs["install_mdm"] and not os.path.exists(kwargs["mdm_apk"]): return messagebox.showerror("Error", f"MDM APK file not found at: {kwargs['mdm_apk']}")
-            check_msg = ("⚠️ MDM TEST PRE-CHECK ⚠️\n\nSetting a Device Owner requires a CLEAN device.\n\nProceed now?")
+            check_msg = ("⚠️ MDM TEST PRE-CHECK ⚠️\n\nAndroid restricts setting Profile Owner/Device Owner if conflicting accounts exist.\n\nProceed now?")
             if not messagebox.askyesno("MDM Provisioning Check", check_msg): return
         
         try: oom_pct = float(self.entry_oom_pct.get().strip())
@@ -1040,10 +1163,11 @@ class ADBStressGUI:
         dispatched_count = 0
         for serial in target_serials:
             if self.device_testing_state.get(serial, False):
-                self.ui_log(f"⚠️ Device [{serial}] is already running a test. Ignoring start command.")
+                self.ui_log(f"⚠️ Device [{serial}] is busy (Test or Bugreport in progress). Ignoring start command.")
                 continue
                 
             self.device_testing_state[serial] = True
+            self.device_stop_event[serial] = False
             self.devices_status[serial] = f"Running: {test_type}"
             self.cpu_procs[serial] = []
             
@@ -1059,7 +1183,6 @@ class ADBStressGUI:
             self.ui_log(f"🚀 Successfully dispatched '{test_type}' to {dispatched_count} device(s).")
 
     def _verify_wifi(self, serial, run_log_file):
-        """Helper to ensure WiFi is actually connected before downloads."""
         self.ui_log("🔍 Verifying WiFi Connection...", serial, run_log_file)
         wifi_check = self.run_adb(["shell", "dumpsys", "wifi"], serial=serial)
         if "mNetworkInfo" in wifi_check and "CONNECTED/CONNECTED" in wifi_check:
@@ -1087,7 +1210,7 @@ class ADBStressGUI:
             self.ui_log(f"=== Test Started: {test_type} ===", serial, run_log_file)
 
             for _ in range(10): 
-                if not self.device_testing_state.get(serial, False): return
+                if self.device_stop_event.get(serial, False): return
                 if "adb_ok" in self.run_adb(["shell", "echo", "adb_ok"], serial=serial):
                     device_ready = True
                     break
@@ -1133,7 +1256,69 @@ class ADBStressGUI:
             # [APM & WiFi Download Logic]
             # ===============================================
 
-            if test_type in ["Download Multiple Files via WiFi (<100MB)", "Download Large Files via WiFi (>200MB)"]:
+            if test_type == "[APM] Power & Display (Wake-up & Brightness)":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : APM Power & Display (Screen OFF) ---", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "223"], serial=serial)
+                    for _ in range(sleep_sec):
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(1)
+                    
+                    if self.device_stop_event.get(serial, False): break
+                    
+                    b1 = random.randint(10, 255)
+                    b2 = random.randint(10, 255)
+                    
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Wake up & Random Brightness Toggle ---", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
+                    time.sleep(1)
+                    self.run_adb(["shell", "input", "keyevent", "82"], serial=serial)
+                    
+                    self.ui_log(f"   ... Setting Brightness to {b1}/255", serial, run_log_file)
+                    self.run_adb(["shell", "cmd", "display", "set-brightness", str(b1/255.0)], serial=serial)
+                    self.run_adb(["shell", "settings", "put", "system", "screen_brightness", str(b1)], serial=serial)
+                    time.sleep(2)
+                    
+                    self.ui_log(f"   ... Setting Brightness to {b2}/255", serial, run_log_file)
+                    self.run_adb(["shell", "cmd", "display", "set-brightness", str(b2/255.0)], serial=serial)
+                    self.run_adb(["shell", "settings", "put", "system", "screen_brightness", str(b2)], serial=serial)
+                    
+                    for _ in range(wake_sec):
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(1)
+                    completed = i
+
+            elif test_type == "[APM] Camera & Media Stress":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : APM Camera Launch & Capture ---", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
+                    
+                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.STILL_IMAGE_CAMERA"], serial=serial)
+                    self.ui_log("⏳ Waiting 4s for camera to initialize ISP...", serial, run_log_file)
+                    time.sleep(4)
+                    
+                    self.ui_log("📸 Triggering Shutter (Capture)", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
+                    time.sleep(1)
+                    self.run_adb(["shell", "input", "keyevent", "24"], serial=serial)
+                    time.sleep(3)
+                    
+                    self.ui_log("⏹️ Closing Camera...", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial) 
+                    time.sleep(1)
+                    completed = i
+
+            elif test_type in ["Download Multiple Files via WiFi (<100MB)", "Download Large Files via WiFi (>200MB)"]:
+                ssid = kw.get("wifi_ssid", "")
+                pwd = kw.get("wifi_pwd", "")
+                if ssid:
+                    self.ui_log(f"🌐 Attempting to auto-connect to WiFi: {ssid}...", serial, run_log_file)
+                    self.run_adb(["shell", "cmd", "wifi", "connect-network", f'"{ssid}"', "wpa2", f'"{pwd}"'], serial=serial)
+                    self.ui_log("⏳ Waiting 8s for network to establish...", serial, run_log_file)
+                    time.sleep(8)
+                
                 if not self._verify_wifi(serial, run_log_file):
                     messagebox.showerror("WiFi Error", f"Device {serial} is not connected to WiFi!\nPlease connect to WiFi first.")
                     raise Exception("WiFi not connected. Test aborted.")
@@ -1147,7 +1332,7 @@ class ADBStressGUI:
                     dl_urls = [f"https://speed.hetzner.de/1GB.bin?v={j}" for j in range(concurrent_tasks)]
                 
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"--- Cycle {i}/{target_val} : Background Downloading {concurrent_tasks} files via WiFi ---", serial, run_log_file)
                     
                     self.run_adb(["shell", "rm", "-f", "/data/local/tmp/wifi_dl_*.tmp"], serial=serial)
@@ -1163,7 +1348,7 @@ class ADBStressGUI:
                     
                     is_timeout = False
                     while any(p.poll() is None for p in procs):
-                        if not self.device_testing_state.get(serial, False): break
+                        if self.device_stop_event.get(serial, False): break
                         if time.time() - start_time > dl_timeout:
                             is_timeout = True
                             break
@@ -1175,7 +1360,7 @@ class ADBStressGUI:
                     self.run_adb(["shell", "killall", "curl"], serial=serial, capture=False)
                     self.run_adb(["shell", "killall", "wget"], serial=serial, capture=False)
                     
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     
                     if is_timeout:
                         self.ui_log(f"⚠️ Cycle {i}: Some downloads timed out after {dl_timeout}s.", serial, run_log_file)
@@ -1187,359 +1372,161 @@ class ADBStressGUI:
 
             elif test_type == "Brightness Random Toggle Stress":
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     rand_brightness = random.randint(10, 255)
                     self.ui_log(f"--- Cycle {i}/{target_val} : Set Brightness to {rand_brightness}/255 ---", serial, run_log_file)
+                    self.run_adb(["shell", "cmd", "display", "set-brightness", str(rand_brightness/255.0)], serial=serial)
                     self.run_adb(["shell", "settings", "put", "system", "screen_brightness", str(rand_brightness)], serial=serial)
                     time.sleep(1)
                     completed = i
 
-            elif test_type == "Local File Copy Stress":
-                src = kw.get("copy_src", "")
-                dest = kw.get("copy_dest", "")
-                if not src or not dest: raise Exception("Source or Destination path cannot be empty!")
+            elif test_type == "[APM] Connectivity (WiFi/BT/Airplane) Toggle":
+                do_wifi = kw.get("apm_wifi", True)
+                do_bt = kw.get("apm_bt", True)
+                do_air = kw.get("apm_air", True)
                 
-                self.run_adb(["shell", f"mkdir -p {dest}"], serial=serial)
+                toggles = []
+                if do_air: toggles.append("Airplane")
+                if do_wifi: toggles.append("WiFi")
+                if do_bt: toggles.append("BT")
+                t_str = "/".join(toggles) if toggles else "None"
                 
+                if not toggles:
+                    self.ui_log("⚠️ Warning: No connectivity options selected. Test will do nothing.", serial, run_log_file)
+                    
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Copying from {src} to {dest} ---", serial, run_log_file)
+                    if not toggles or self.device_stop_event.get(serial, False): break
                     
-                    start_time = time.time()
-                    copy_res = self.run_adb(["shell", f"cp -r {src}/* {dest}/ 2>/dev/null || cp -r {src} {dest}/"], serial=serial)
-                    elapsed = time.time() - start_time
+                    self.ui_log(f"--- Cycle {i}/{target_val} : APM Connectivity Disable ({t_str} OFF) ---", serial, run_log_file)
+                    if do_air:
+                        self.run_adb(["shell", "settings put global airplane_mode_on 1"], serial=serial)
+                        self.run_adb(["shell", "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true"], serial=serial)
+                    if do_wifi:
+                        self.run_adb(["shell", "svc wifi disable"], serial=serial)
+                    if do_bt:
+                        self.run_adb(["shell", "svc bluetooth disable"], serial=serial)
+                    time.sleep(3)
                     
-                    self.ui_log(f"✅ Copy completed in {elapsed:.1f}s. Result: {copy_res}", serial, run_log_file)
-                    time.sleep(1)
-                    
-                    self.ui_log(f"🧹 Deleting destination files to prepare for next cycle...", serial, run_log_file)
-                    self.run_adb(["shell", f"rm -rf {dest}/*"], serial=serial)
-                    time.sleep(1)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : APM Connectivity Enable ({t_str} ON) ---", serial, run_log_file)
+                    if do_air:
+                        self.run_adb(["shell", "settings put global airplane_mode_on 0"], serial=serial)
+                        self.run_adb(["shell", "am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false"], serial=serial)
+                    if do_wifi:
+                        self.run_adb(["shell", "svc wifi enable"], serial=serial)
+                    if do_bt:
+                        self.run_adb(["shell", "svc bluetooth enable"], serial=serial)
+                    time.sleep(5)
                     completed = i
 
-            elif test_type == "Batch APK Installation Stress":
-                apk_folder = kw.get("apk_folder", "")
-                if not os.path.exists(apk_folder):
-                    raise Exception(f"APK folder not found: {apk_folder}")
+            elif test_type in ["Browser Download Stress (Intent)", "[APM] Data I/O (Browser Download)"]:
+                if not dl_url or not dl_file:
+                    raise Exception("Download URL and Expected Filename cannot be empty!")
                 
-                apks = [f for f in os.listdir(apk_folder) if f.lower().endswith(".apk")]
-                if not apks:
-                    raise Exception(f"No APK files found in {apk_folder}")
+                self.ui_log("🛡️ Bypassing Chrome First Run Experience (Welcome Screen)...", serial, run_log_file)
+                self.run_adb(["shell", "echo 'chrome --disable-fre --no-default-browser-check --no-first-run' > /data/local/tmp/chrome-command-line"], serial=serial)
                 
-                self.ui_log(f"📦 Found {len(apks)} APKs. Starting sequential installation...", serial, run_log_file)
+                base_name = os.path.splitext(dl_file)[0]
+                total_bytes = self.get_remote_file_size_pc(dl_url)
                 
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Batch APK Install ---", serial, run_log_file)
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Browser to Download ---", serial, run_log_file)
                     
-                    for idx, apk_file in enumerate(apks):
-                        if not self.device_testing_state.get(serial, False): break
-                        apk_path = os.path.join(apk_folder, apk_file)
-                        self.ui_log(f"   [{idx+1}/{len(apks)}] Installing {apk_file}...", serial, run_log_file)
+                    self.run_adb(["shell", "rm", "-f", f"/sdcard/Download/{base_name}*"], serial=serial)
+                    self.run_adb(["shell", "am", "start", "-n", "com.android.chrome/com.google.android.apps.chrome.Main", "-a", "android.intent.action.VIEW", "-d", f"\"{dl_url}\""], serial=serial)
+                    
+                    start_time = time.time()
+                    last_size = -1
+                    stable_count = 0
+                    downloaded = False
+                    
+                    self.ui_log("⏳ Waiting for browser download to complete...", serial, run_log_file)
+                    
+                    while time.time() - start_time < dl_timeout:
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(3)
                         
-                        install_res = self.run_adb(["install", "-r", "-d", "-g", apk_path], serial=serial, timeout=120)
-                        if "Success" not in install_res:
-                            self.ui_log(f"❌ Installation failed for {apk_file}. Error: {install_res}", serial, run_log_file)
-                            raise Exception(f"APK Install Error: {apk_file}")
+                        cr_size = self._get_file_size(serial, f"/sdcard/Download/{dl_file}.crdownload")
+                        part_size = self._get_file_size(serial, f"/sdcard/Download/{dl_file}.part")
+                        final_size = self._get_file_size(serial, f"/sdcard/Download/{dl_file}")
+                        
+                        current_size = 0
+                        is_temp = False
+                        
+                        if cr_size > 0 or part_size > 0:
+                            current_size = max(cr_size, part_size)
+                            is_temp = True
                         else:
-                            self.ui_log(f"   ✅ Success: {apk_file}", serial, run_log_file)
+                            current_size = final_size
                             
-                    completed = i
-
-            elif test_type == "Multi-App Background & One-Click Clean":
-                out = self.run_adb(["shell", "pm", "list", "packages", "-3"], serial=serial)
-                pkgs = [p.replace("package:", "") for p in out.splitlines() if p.startswith("package:")]
-                if len(pkgs) < 10:
-                    self.ui_log(f"⚠️ Warning: Less than 10 third-party apps found. Falling back to system apps.", serial, run_log_file)
-                    out = self.run_adb(["shell", "pm", "list", "packages"], serial=serial)
-                    pkgs = [p.replace("package:", "") for p in out.splitlines() if p.startswith("package:")]
-                    
-                target_apps = pkgs[:15]
-                
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching {len(target_apps)} Apps into Background ---", serial, run_log_file)
-                    
-                    for pkg in target_apps:
-                        if not self.device_testing_state.get(serial, False): break
-                        self.run_adb(["shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1"], serial=serial)
-                        time.sleep(2)
-                        
-                    if not self.device_testing_state.get(serial, False): break
-                    
-                    self.ui_log(f"🧹 Triggering One-Click Clean (Simulated via am kill-all & Recents clear)...", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "187"], serial=serial)
-                    time.sleep(2)
-                    self.run_adb(["shell", "am", "kill-all"], serial=serial)
-                    time.sleep(1)
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    
-                    self.ui_log(f"✅ Clean up done. Waiting 5s to check for freeze...", serial, run_log_file)
-                    time.sleep(5)
-                    ping = self.run_adb(["shell", "echo", "alive"], serial=serial)
-                    if "alive" not in ping:
-                        raise Exception("System Freeze detected after One-Click Clean!")
-                        
-                    completed = i
-
-            elif test_type == "Audio - Playback & Controls Stress":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Music Player ---", serial, run_log_file)
-                    self.run_adb(["shell", "am", "start", "-a", "android.intent.action.MUSIC_PLAYER"], serial=serial)
-                    time.sleep(3)
-                    
-                    self.ui_log(f"▶️ Pressing Play", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "126"], serial=serial)
-                    time.sleep(10)
-                    
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"⏭️ Next Track", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "87"], serial=serial)
-                    time.sleep(5)
-                    
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"⏮️ Previous Track", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "88"], serial=serial)
-                    time.sleep(5)
-                    
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"🔊 Max Volume", serial, run_log_file)
-                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "24"], serial=serial)
-                    time.sleep(5)
-                    
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"🔈 Min Volume", serial, run_log_file)
-                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "25"], serial=serial)
-                    time.sleep(5)
-                    
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"⏸️ Pause", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "127"], serial=serial)
-                    time.sleep(5)
-                    
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"⏩ Change Progress (Fast Forward)", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "90"], serial=serial)
-                    time.sleep(5)
-                    
-                    self.ui_log(f"⏹️ Exiting Music Player", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    time.sleep(2)
-                    completed = i
-
-            elif test_type == "Audio - Background Play & Screen Lock":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Start Background Music ---", serial, run_log_file)
-                    self.run_adb(["shell", "am", "start", "-a", "android.intent.action.MUSIC_PLAYER"], serial=serial)
-                    time.sleep(3)
-                    self.run_adb(["shell", "input", "keyevent", "126"], serial=serial)
-                    time.sleep(2)
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    
-                    self.ui_log(f"🔒 Locking Screen for 2 minutes...", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "223"], serial=serial)
-                    
-                    for _ in range(120):
-                        if not self.device_testing_state.get(serial, False): break
-                        time.sleep(1)
-                        
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"🔓 Waking Screen & Unlocking", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
-                    time.sleep(1)
-                    self.run_adb(["shell", "input", "keyevent", "82"], serial=serial)
-                    time.sleep(2)
-                    
-                    self.run_adb(["shell", "input", "keyevent", "127"], serial=serial)
-                    completed = i
-
-            elif test_type == "Camera - Front/Rear":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Front Camera (Photo) ---", serial, run_log_file)
-                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE", "--ei", "android.intent.extras.CAMERA_FACING", "1"], serial=serial)
-                    time.sleep(4)
-                    
-                    self.ui_log("📸 Taking 2 Photos...", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
-                    time.sleep(2)
-                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
-                    time.sleep(2)
-                    
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Rear Camera (Video) ---", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    time.sleep(1)
-                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.VIDEO_CAPTURE", "--ei", "android.intent.extras.CAMERA_FACING", "0"], serial=serial)
-                    time.sleep(4)
-                    
-                    self.ui_log("🎥 Recording Video for 5 seconds...", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
-                    time.sleep(5)
-                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
-                    time.sleep(2)
-                    
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    completed = i
-
-            elif test_type == "Camera - Continuous Shooting (100 shots)":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Continuous Shooting (100 shots) ---", serial, run_log_file)
-                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE"], serial=serial)
-                    time.sleep(4)
-                    
-                    self.ui_log("📸 Triggering 100 rapid shots...", serial, run_log_file)
-                    for _ in range(100):
-                        if not self.device_testing_state.get(serial, False): break
-                        self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
-                        
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    time.sleep(2)
-                    completed = i
-
-            elif test_type == "Camera - Switch Storage Space (Ext/Int)":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Storage Switch (Note: Requires native camera support) ---", serial, run_log_file)
-                    
-                    self.ui_log("💾 Switching to External Storage (Simulated via property)...", serial, run_log_file)
-                    self.run_adb(["shell", "setprop", "sys.camera.storage", "sdcard"], serial=serial)
-                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE"], serial=serial)
-                    time.sleep(4)
-                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
-                    time.sleep(2)
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    
-                    self.ui_log("💾 Switching to Internal Storage (Built-in)...", serial, run_log_file)
-                    self.run_adb(["shell", "setprop", "sys.camera.storage", "internal"], serial=serial)
-                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE"], serial=serial)
-                    time.sleep(4)
-                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
-                    time.sleep(2)
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    
-                    completed = i
-
-            # ===============================================
-            # [Original Existing Logic Below (Retained fully)]
-            # ===============================================
-
-            elif test_type in ["Video Streaming Stress Test", "[APM] Burn-in (Video Streaming)"]:
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Wake up & Start Video Stream ---", serial, run_log_file)
-                    
-                    self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
-                    time.sleep(1)
-                    self.run_adb(["shell", "input", "keyevent", "82"], serial=serial)
-                    time.sleep(2)
-                    
-                    url = kw.get("vid_url", "")
-                    play_seconds = int(kw.get("vid_hours", 2.0) * 3600)
-                    
-                    self.ui_log(f"🔗 Launching URL: {url}", serial, run_log_file)
-                    
-                    if "youtu" in url.lower():
-                        self.ui_log("🎬 YouTube URL detected. Opening via Browser/App...", serial, run_log_file)
-                        self.run_adb(["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", f'"{url}"'], serial=serial)
-                        self.ui_log("⏳ Waiting 8s for YouTube page to load...", serial, run_log_file)
-                        time.sleep(8)
-                        
-                        self.run_adb(["shell", "input", "tap", "500", "500"], serial=serial)
-                        self.run_adb(["shell", "input", "tap", "500", "500"], serial=serial)
-                        time.sleep(1)
-                        
-                        self.ui_log("🔄 Sending 'F' key to trigger native YouTube Full-Screen...", serial, run_log_file)
-                        self.run_adb(["shell", "input", "keyevent", "34"], serial=serial)
-                        
-                    else:
-                        self.ui_log("🎬 Using Native Video Player intent for guaranteed Full-Screen...", serial, run_log_file)
-                        self.run_adb(["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", f'"{url}"', "-t", "video/*"], serial=serial)
-                        self.ui_log("⏳ Waiting 5s for player to buffer...", serial, run_log_file)
-                        time.sleep(5)
-                        self.run_adb(["shell", "input", "keyevent", "126"], serial=serial)
-
-                    self.ui_log(f"▶️ Streaming for {kw.get('vid_hours')} hours ({play_seconds} seconds)...", serial, run_log_file)
-                    start_time = time.time()
-                    
-                    while time.time() - start_time < play_seconds:
-                        if not self.device_testing_state.get(serial, False): break
-                        
-                        elapsed = int(time.time() - start_time)
-                        if elapsed > 0 and elapsed % 300 == 0:
-                            self.ui_log("   ... Sending Keep-Awake signal (KeyEvent 224)", serial, run_log_file)
-                            self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
+                        if current_size > 0:
+                            if total_bytes > 0:
+                                pct = min(100.0, (current_size / total_bytes) * 100)
+                                self.ui_log(f"   ... Browser downloading: {current_size/(1024*1024):.1f} MB / {total_bytes/(1024*1024):.1f} MB ({pct:.1f}%)", serial, run_log_file)
+                            else:
+                                self.ui_log(f"   ... Browser downloading: {current_size/(1024*1024):.1f} MB", serial, run_log_file)
+                                
+                            if not is_temp and current_size == last_size:
+                                stable_count += 1
+                                if stable_count >= 2: 
+                                    downloaded = True
+                                    break
+                            else:
+                                stable_count = 0
+                        else:
+                            self.ui_log(f"   ... Waiting for browser to start download...", serial, run_log_file)
                             
-                        time.sleep(1)
+                        last_size = current_size
                             
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     
-                    self.ui_log("⏹️ Cycle finished. Stopping playback...", serial, run_log_file)
                     self.run_adb(["shell", "am", "force-stop", "com.android.chrome"], serial=serial)
-                    self.run_adb(["shell", "am", "force-stop", "com.google.android.youtube"], serial=serial)
-                    self.run_adb(["shell", "am", "force-stop", "com.google.android.apps.photos"], serial=serial)
+                    self.run_adb(["shell", "am", "force-stop", "com.android.browser"], serial=serial)
+                    self.run_adb(["shell", "am", "force-stop", "org.mozilla.firefox"], serial=serial)
                     
-                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
-                    
-                    pause_seconds = int(kw.get("vid_pause", 5.0) * 60)
-                    if pause_seconds > 0 and i < target_val:
-                        self.ui_log(f"⏸️ Cooling down for {kw.get('vid_pause')} minutes ({pause_seconds}s)...", serial, run_log_file)
-                        for sec in range(pause_seconds):
-                            if not self.device_testing_state.get(serial, False): break
-                            time.sleep(1)
-                            
-                    completed = i
-            
-            elif test_type == "Fingerprint HAL Stress":
-                self.ui_log(f"💡 [Interactive Test] You can touch the fingerprint sensor anytime during the test to check responsiveness.", serial, run_log_file)
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Fingerprint HAL Polling & Screen Off ---", serial, run_log_file)
-                    
-                    fp_out = self.run_adb(["shell", "dumpsys", "fingerprint"], serial=serial)
-                    if "Can't find service" in fp_out or not fp_out.strip():
-                        fp_out = self.run_adb(["shell", "dumpsys", "biometric"], serial=serial)
-                        
-                    if "Can't find service" in fp_out or not fp_out.strip():
-                        self.ui_log("⚠️ Warning: Unable to retrieve Fingerprint/Biometric service state (HAL may have crashed or sensor is absent)", serial, run_log_file)
+                    if downloaded:
+                        size_mb = last_size / (1024 * 1024)
+                        elapsed = time.time() - start_time
+                        self.ui_log(f"✅ Browser downloaded {size_mb:.2f} MB in {elapsed:.1f}s", serial, run_log_file)
                     else:
-                        self.ui_log("✅ Fingerprint Service is ALIVE.", serial, run_log_file)
-                        
-                    self.run_adb(["shell", "input", "keyevent", "223"], serial=serial)
+                        raise Exception(f"Cycle {i} Error: Browser download timed out after {dl_timeout}s.")
                     
-                    self.ui_log(f"Sleeping for {sleep_sec}s...", serial, run_log_file)
-                    for _ in range(sleep_sec):
-                        if not self.device_testing_state.get(serial, False): break
-                        time.sleep(1)
-
-                    if not self.device_testing_state.get(serial, False): break
+                    if dl_delete_after:
+                        self.ui_log(f"🧹 Cycle {i} finished. Cleaning up downloaded files...", serial, run_log_file)
+                        self.run_adb(["shell", "rm", "-f", f"/sdcard/Download/{base_name}*"], serial=serial)
                     
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Wake up screen ---", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
-
-                    self.ui_log(f"Holding screen ON for {wake_sec}s...", serial, run_log_file)
-                    for _ in range(wake_sec):
-                        if not self.device_testing_state.get(serial, False): break
-                        time.sleep(1)
-
+                    time.sleep(2)
                     completed = i
 
             elif test_type in ["Reboot & Shutdown Stress", "[APM] System Restart & Shutdown Stress"]:
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"--- Cycle {i}/{target_val} : Issuing Reboot Command ---", serial, run_log_file)
                     
                     self.run_adb(["reboot"], serial=serial)
-                    time.sleep(10)
                     
-                    self.ui_log("⏳ Waiting for device to boot up and reconnect (Timeout 15 mins)...", serial, run_log_file)
+                    self.ui_log("⏳ Waiting for device to disconnect...", serial, run_log_file)
+                    offline_wait_start = time.time()
+                    is_offline = False
+                    while time.time() - offline_wait_start < 120:
+                        if self.device_stop_event.get(serial, False): break
+                        ping = self.run_adb(["shell", "echo", "ping"], serial=serial, timeout=3)
+                        if "ping" not in ping:
+                            is_offline = True
+                            break
+                        time.sleep(2)
+                        
+                    if not is_offline and not self.device_stop_event.get(serial, False):
+                        raise Exception(f"Cycle {i} Error: Device refused to reboot (Hang up detected).")
+
+                    self.ui_log("🔌 Device offline. Waiting for boot & reconnect (Timeout 15 mins)...", serial, run_log_file)
+                    time.sleep(15)
+                    
                     wait_start = time.time()
                     device_online = False
                     
                     while time.time() - wait_start < 900:
-                        if not self.device_testing_state.get(serial, False): break
+                        if self.device_stop_event.get(serial, False): break
                         
                         if ":" in serial:
                             try:
@@ -1549,32 +1536,34 @@ class ADBStressGUI:
                                 pass 
                         
                         sys_boot = self.run_adb(["shell", "getprop", "sys.boot_completed"], serial=serial)
-                        if "1" in sys_boot:
-                            device_online = True
-                            break
-                        elif sys_boot.strip() == "0" or sys_boot.strip() == "":
-                            pass
+                        anim_state = self.run_adb(["shell", "getprop", "init.svc.bootanim"], serial=serial)
+                        
+                        if "1" in sys_boot and "stopped" in anim_state:
+                            win_check = self.run_adb(["shell", "dumpsys", "window", "displays"], serial=serial)
+                            if "DisplayContents" in win_check or "Display" in win_check:
+                                device_online = True
+                                break
                             
                         time.sleep(5)
                         
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     
                     if not device_online:
                         check_conn = self.run_adb(["shell", "echo", "ping"], serial=serial)
                         if "ping" in check_conn:
-                            raise Exception(f"Cycle {i} Error: Device is stuck in BOOTLOOP! (ADB connected but OS boot failed)")
+                            raise Exception(f"Cycle {i} Error: Device is stuck in BOOTLOOP or Boot Anim! (ADB connected but UI failed)")
                         else:
-                            raise Exception(f"Cycle {i} Error: Device failed to boot or connect within 15 minutes.")
+                            raise Exception(f"Cycle {i} Error: Device failed to connect within 15 mins. (Shutdown or Hang up)")
                         
-                    self.ui_log(f"✅ Device boot completed. Holding for {reboot_up} sec...", serial, run_log_file)
+                    self.ui_log(f"✅ Device boot completed and UI ready. Holding for {reboot_up} sec...", serial, run_log_file)
                     
                     for remain in range(reboot_up, 0, -1):
-                        if not self.device_testing_state.get(serial, False): break
+                        if self.device_stop_event.get(serial, False): break
                         if remain % 5 == 0 or remain <= 5:
                             self.ui_log(f"   ... Waiting {remain} sec", serial, run_log_file)
                         time.sleep(1)
                         
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     
                     if do_shutdown:
                         self.ui_log(f"--- Cycle {i}/{target_val} : Issuing Shutdown Command (reboot -p) ---", serial, run_log_file)
@@ -1582,14 +1571,14 @@ class ADBStressGUI:
                         
                         self.ui_log(f"⏳ Device shutting down. Holding for {reboot_down} sec before next reboot...", serial, run_log_file)
                         for remain in range(reboot_down, 0, -1):
-                            if not self.device_testing_state.get(serial, False): break
+                            if self.device_stop_event.get(serial, False): break
                             if remain % 5 == 0 or remain <= 5:
                                 self.ui_log(f"   ... {remain} sec remaining until next cycle", serial, run_log_file)
                             time.sleep(1)
                     else:
                         self.ui_log(f"⏳ Skipping Shutdown phase. Waiting {reboot_down} sec interval before next Reboot...", serial, run_log_file)
                         for remain in range(reboot_down, 0, -1):
-                            if not self.device_testing_state.get(serial, False): break
+                            if self.device_stop_event.get(serial, False): break
                             if remain % 5 == 0 or remain <= 5:
                                 self.ui_log(f"   ... {remain} sec remaining until next Reboot", serial, run_log_file)
                             time.sleep(1)
@@ -1603,63 +1592,53 @@ class ADBStressGUI:
                     self.run_adb(["shell", "settings", "put", "global", "verifier_verify_adb_installs", "0"], serial=serial)
                     
                     self.ui_log(f"📦 Auto-Installing MDM APK (-g -d -t): {kw['mdm_apk']}...", serial, run_log_file)
-                    
                     install_out = self.run_adb(["install", "-r", "-t", "-d", "-g", kw["mdm_apk"]], serial=serial, timeout=120)
-                    
                     if "Success" not in install_out:
                         raise Exception(f"Failed to install MDM APK. ADB Output: {install_out}")
                     self.ui_log("✅ MDM APK Installed and Runtime Permissions auto-granted successfully.", serial, run_log_file)
 
+                pkg_name = kw["mdm_comp"].split("/")[0] if "/" in kw["mdm_comp"] else "com.mdm.client"
+                
+                dp_check = self.run_adb(["shell", "dumpsys", "device_policy"], serial=serial)
+                if kw["mdm_comp"] in dp_check and "Device Owner:" in dp_check:
+                    self.ui_log("🧹 [Android Restriction Bypass] Detected existing Device Owner. Removing it to unlock Work Profile creation...", serial, run_log_file)
+                    self.run_adb(["shell", "dpm", "remove-active-admin", kw["mdm_comp"]], serial=serial)
+                    time.sleep(3)
+
                 if kw["set_owner"]:
-                    pkg_name = kw["mdm_comp"].split("/")[0] if "/" in kw["mdm_comp"] else "com.mdm.client"
-                    
                     self.ui_log("🔍 [Smart Check] Verifying 'testOnly' flag in installed package...", serial, run_log_file)
                     pkg_dump = self.run_adb(["shell", "dumpsys", "package", pkg_name], serial=serial)
-                    
                     if "TEST_ONLY" not in pkg_dump and "testOnly=true" not in pkg_dump.replace(" ", "") and "test_only" not in pkg_dump.lower():
                         err_msg = (f"FATAL: The installed APK is MISSING the 'android:testOnly=\"true\"' flag!\n\n"
                                    f"Android OS completely rejects setting a Device Owner if this flag is missing.\n"
-                                   f"Even if RD said they added it, the compilation process (like ProGuard or Release build variant) likely stripped it out.\n\n"
-                                   f"💡 SOLUTION: Please send this error to RD and ask for an APK explicitly built with the testOnly flag retained.")
+                                   f"💡 SOLUTION: Please ask RD for an APK explicitly built with the testOnly flag retained.")
                         raise Exception(err_msg)
-                    
-                    self.ui_log("🔍 [Smart Check] Scanning for existing accounts...", serial, run_log_file)
-                    acc_out = self.run_adb(["shell", "dumpsys", "account"], serial=serial)
-                    if "Account {" in acc_out:
-                        self.ui_log("❌ [FATAL] Existing accounts detected! Android STRICTLY FORBIDS setting Device Owner.", serial, run_log_file)
-                        raise Exception("Accounts found. Please FACTORY RESET the device!")
-                        
-                    self.ui_log("🔍 [Smart Check] Scanning for lingering users/profiles...", serial, run_log_file)
-                    usr_out = self.run_adb(["shell", "pm", "list", "users"], serial=serial)
-                    if usr_out.count("UserInfo{") > 1:
-                        self.ui_log(f"⚠️ [WARNING] Multiple users detected, this might block DPM: {usr_out.strip().replace(chr(10), ' ')}", serial, run_log_file)
 
-                    self.ui_log(f"🔑 Granting READ_LOGS permission to {pkg_name}...", serial, run_log_file)
-                    self.run_adb(["shell", "pm", "grant", pkg_name, "android.permission.READ_LOGS"], serial=serial)
-                    
-                    dp_check = self.run_adb(["shell", "dumpsys", "device_policy"], serial=serial)
-                    if kw["mdm_comp"] in dp_check and ("Device Owner:" in dp_check or "admin=" in dp_check):
-                        self.ui_log(f"✅ App '{kw['mdm_comp']}' is ALREADY the Device Owner. Skipping setting process.", serial, run_log_file)
-                    else:
-                        self.ui_log(f"👑 Setting Device Owner: {kw['mdm_comp']}...", serial, run_log_file)
-                        dpm_out = self.run_adb(["shell", "dpm", "set-device-owner", kw["mdm_comp"]], serial=serial)
-                        self.ui_log(f"DPM Output: {dpm_out}", serial, run_log_file)
-                        
-                        if "Success" not in dpm_out and "Active admin set" not in dpm_out and "already" not in dpm_out.lower():
-                            err_msg = (f"Failed to set Device Owner.\n\n"
-                                       f"⚠️ ANDROID RESTRICTION: Android STRICTLY FORBIDS setting a Device Owner if the device has ANY user accounts logged in (e.g., Google Account), or if a previous Work Profile hasn't been wiped.\n\n"
-                                       f"💡 SOLUTION: Please FACTORY RESET the device, skip the Google Sign-in on setup, and try again!\n\n"
-                                       f"ADB Output: {dpm_out}")
-                            raise Exception(err_msg)
-                    time.sleep(2)
+                out_users = self.run_adb(["shell", "pm", "list", "users"], serial=serial)
+                for line in out_users.splitlines():
+                    if "MDM_Stress" in line:
+                        try:
+                            uid = line.split("{")[1].split(":")[0]
+                            self.run_adb(["shell", "pm", "remove-user", uid], serial=serial)
+                        except: pass
+
+                self.ui_log(f"🔑 Granting READ_LOGS permission to {pkg_name}...", serial, run_log_file)
+                self.run_adb(["shell", "pm", "grant", pkg_name, "android.permission.READ_LOGS"], serial=serial)
             
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"--- Cycle {i}/{target_val} : Setting up Managed Work Profile ---", serial, run_log_file)
                     
                     out = self.run_adb(["shell", "pm", "create-user", "--profileOf", "0", "--managed", "MDM_Stress"], serial=serial)
                     if "Success: created user id" not in out:
-                        raise Exception(f"Cycle {i} Error: Failed to create Managed Profile. Device might not support Multi-User or DPM. Output: {out}")
+                        if "no_add_managed_profile" in out:
+                            err_msg = (f"Cycle {i} Error: Android blocked Work Profile creation.\n"
+                                       f"Reason: 'no_add_managed_profile' is enabled. This means another Device Owner or Policy is blocking this action.\n"
+                                       f"💡 Solution: Please FACTORY RESET the device, skip all account logins, and try again!\n"
+                                       f"Output: {out}")
+                            raise Exception(err_msg)
+                        else:
+                            raise Exception(f"Cycle {i} Error: Failed to create Managed Profile. Device might not support Multi-User or DPM. Output: {out}")
                     
                     try:
                         user_id = out.split("id")[1].strip()
@@ -1668,13 +1647,24 @@ class ADBStressGUI:
                         
                     self.ui_log(f"✅ Work Profile created with User ID: {user_id}. Starting user...", serial, run_log_file)
                     self.run_adb(["shell", "am", "start-user", user_id], serial=serial)
+                    time.sleep(3)
+                    
+                    if kw["set_owner"]:
+                        self.ui_log(f"📦 Installing MDM payload into new Work Profile (User {user_id})...", serial, run_log_file)
+                        self.run_adb(["shell", "pm", "install-existing", "--user", user_id, pkg_name], serial=serial)
+                        time.sleep(2)
+                        
+                        self.ui_log(f"👑 Setting Profile Owner for Work Profile (User {user_id})...", serial, run_log_file)
+                        dpm_out = self.run_adb(["shell", "dpm", "set-profile-owner", "--user", user_id, kw["mdm_comp"]], serial=serial)
+                        if "Success" not in dpm_out and "already" not in dpm_out.lower():
+                            self.ui_log(f"⚠️ Failed to set Profile Owner. Output: {dpm_out}", serial, run_log_file)
                     
                     self.ui_log(f"⏳ Holding MDM state active for {sleep_sec}s...", serial, run_log_file)
                     for _ in range(sleep_sec):
-                        if not self.device_testing_state.get(serial, False): break
+                        if self.device_stop_event.get(serial, False): break
                         time.sleep(1)
                         
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                         
                     self.ui_log(f"🧹 Tearing down Work Profile (User ID: {user_id})...", serial, run_log_file)
                     self.run_adb(["shell", "pm", "remove-user", user_id], serial=serial)
@@ -1683,7 +1673,7 @@ class ADBStressGUI:
 
             elif test_type == "Storage Fake OOM Fill (%)":
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"--- Cycle {i}/{target_val} : Storage OOM Fill (Target: {oom_pct}%) ---", serial, run_log_file)
                     
                     self.run_adb(["shell", "rm", "-f", "/data/local/tmp/oom_fill*"], serial=serial)
@@ -1709,7 +1699,7 @@ class ADBStressGUI:
                         self.ui_log(f"⏳ Generating payload in {chunk_size}MB chunks to prevent system RAM overflow...", serial, run_log_file)
 
                         for c in range(int(chunks)):
-                            if not self.device_testing_state.get(serial, False): break
+                            if self.device_stop_event.get(serial, False): break
                             cmd_dd = ["adb", "-s", serial, "shell", f"dd if=/dev/zero bs=1048576 count={chunk_size} >> /data/local/tmp/oom_fill.tmp"]
                             subprocess.run(cmd_dd, capture_output=True, **get_cflags())
                             cur_mb = (c + 1) * chunk_size
@@ -1717,13 +1707,13 @@ class ADBStressGUI:
                             self.ui_log(f"   ... Filling progress: {cur_mb} MB / {mb_to_fill} MB ({pct:.1f}%)", serial, run_log_file)
                             time.sleep(0.01)
 
-                        if remainder > 0 and self.device_testing_state.get(serial, False):
+                        if remainder > 0 and not self.device_stop_event.get(serial, False):
                             cmd_dd = ["adb", "-s", serial, "shell", f"dd if=/dev/zero bs=1048576 count={int(remainder)} >> /data/local/tmp/oom_fill.tmp"]
                             subprocess.run(cmd_dd, capture_output=True, **get_cflags())
                             self.ui_log(f"   ... Filling progress: {mb_to_fill} MB / {mb_to_fill} MB (100.0%)", serial, run_log_file)
                             time.sleep(0.01)
                         
-                        if not self.device_testing_state.get(serial, False): break
+                        if self.device_stop_event.get(serial, False): break
                         
                         elapsed = time.time() - start_time
                         self.ui_log(f"✅ Filled approx. {mb_to_fill} MB in {elapsed:.1f}s", serial, run_log_file)
@@ -1767,7 +1757,7 @@ class ADBStressGUI:
                         def log_oom_monkey_output(p, s, log_f):
                             try:
                                 for line in p.stdout:
-                                    if not self.device_testing_state.get(s, False): break
+                                    if self.device_stop_event.get(s, False): break
                                     line_str = line.strip()
                                     if "CRASH" in line_str or "ANR" in line_str or "Exception" in line_str:
                                         self.ui_log("🔥 [OOM-Monkey-CRASH] " + line_str, s, log_f)
@@ -1779,7 +1769,7 @@ class ADBStressGUI:
                         threading.Thread(target=log_oom_monkey_output, args=(oom_monkey_proc, serial, run_log_file), daemon=True).start()
 
                     for _ in range(hold_seconds):
-                        if not self.device_testing_state.get(serial, False): break
+                        if self.device_stop_event.get(serial, False): break
                         time.sleep(1)
                         
                     if oom_monkey_proc:
@@ -1788,7 +1778,7 @@ class ADBStressGUI:
                         self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=serial, capture=False)
                         self.ui_log(f"⏹️ [OOM-App-Test] Monkey test finished.", serial, run_log_file)
                     
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     
                     self.ui_log(f"🧹 Cycle {i} finished. Cleaning up OOM payload...", serial, run_log_file)
                     self.run_adb(["shell", "rm", "-f", "/data/local/tmp/oom_fill*"], serial=serial)
@@ -1830,7 +1820,7 @@ class ADBStressGUI:
                 def log_monkey_output(p, s, log_f):
                     try:
                         for line in p.stdout:
-                            if not self.device_testing_state.get(s, False): break
+                            if self.device_stop_event.get(s, False): break
                             self.ui_log("Monkey: " + line.strip(), s, log_f)
                     except: pass
                 
@@ -1840,7 +1830,7 @@ class ADBStressGUI:
                 target_sec = target_val * 60
                 
                 while m_proc.poll() is None:
-                    if not self.device_testing_state.get(serial, False) or time.time() - start_time >= target_sec: break
+                    if self.device_stop_event.get(serial, False) or time.time() - start_time >= target_sec: break
                     time.sleep(1)
                 
                 try: m_proc.terminate()
@@ -1855,7 +1845,7 @@ class ADBStressGUI:
                 if not paths: paths = ["/data/local/tmp"]
 
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"--- Cycle {i}/{target_val} : Writing 1GB File to {len(paths)} Storage(s) ---", serial, run_log_file)
                     
                     procs = []
@@ -1868,9 +1858,9 @@ class ADBStressGUI:
                         
                         if not kw.get("concurrent_io", False):
                             while p_dd.poll() is None:
-                                if not self.device_testing_state.get(serial, False): break
+                                if self.device_stop_event.get(serial, False): break
                                 time.sleep(1)
-                            if not self.device_testing_state.get(serial, False): break
+                            if self.device_stop_event.get(serial, False): break
                             out = p_dd.stdout.read().strip() if p_dd.stdout else ""
                             self.ui_log(f"✅ DD Output [{p}]: {out}", serial, run_log_file)
                             self.run_adb(["shell", "rm", "-f", file_path], serial=serial)
@@ -1878,9 +1868,9 @@ class ADBStressGUI:
                     if kw.get("concurrent_io", False):
                         self.ui_log(f"⏳ Waiting for all concurrent writes to finish...", serial, run_log_file)
                         while any(p_dd.poll() is None for p_dd, _, _ in procs):
-                            if not self.device_testing_state.get(serial, False): break
+                            if self.device_stop_event.get(serial, False): break
                             time.sleep(1)
-                        if not self.device_testing_state.get(serial, False): break
+                        if self.device_stop_event.get(serial, False): break
                         for p_dd, file_path, p in procs:
                             out = p_dd.stdout.read().strip() if p_dd.stdout else ""
                             self.ui_log(f"✅ DD Output [{p}]: {out}", serial, run_log_file)
@@ -1893,7 +1883,7 @@ class ADBStressGUI:
                 total_bytes = self.get_remote_file_size_pc(dl_url)
                 
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"--- Cycle {i}/{target_val} : Background Downloading File ---", serial, run_log_file)
                     
                     self.run_adb(["shell", "rm", "-f", "/data/local/tmp/dl_stress.tmp"], serial=serial)
@@ -1907,7 +1897,7 @@ class ADBStressGUI:
                     last_check_time = time.time()
                     
                     while dl_proc.poll() is None:
-                        if not self.device_testing_state.get(serial, False):
+                        if self.device_stop_event.get(serial, False):
                             try: dl_proc.terminate()
                             except: pass
                             self.run_adb(["shell", "killall", "curl"], serial=serial, capture=False)
@@ -1935,7 +1925,7 @@ class ADBStressGUI:
                             
                         time.sleep(1)
                         
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     if is_timeout: raise Exception(f"Cycle {i} Error: Download timed out after {dl_timeout}s.")
                     
                     size_bytes = self._get_file_size(serial, "/data/local/tmp/dl_stress.tmp")
@@ -1951,235 +1941,6 @@ class ADBStressGUI:
                         self.run_adb(["shell", "rm", "-f", "/data/local/tmp/dl_stress.tmp"], serial=serial)
                     completed = i
 
-            elif test_type in ["Browser Download Stress (Intent)", "[APM] Data I/O (Browser Download)"]:
-                if not dl_url or not dl_file:
-                    raise Exception("Download URL and Expected Filename cannot be empty!")
-                
-                base_name = os.path.splitext(dl_file)[0]
-                total_bytes = self.get_remote_file_size_pc(dl_url)
-                
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Browser to Download ---", serial, run_log_file)
-                    
-                    self.run_adb(["shell", "rm", "-f", f"/sdcard/Download/{base_name}*"], serial=serial)
-                    self.run_adb(["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", f"\"{dl_url}\""], serial=serial)
-                    
-                    start_time = time.time()
-                    last_size = -1
-                    stable_count = 0
-                    downloaded = False
-                    
-                    self.ui_log("⏳ Waiting for browser download to complete...", serial, run_log_file)
-                    
-                    while time.time() - start_time < dl_timeout:
-                        if not self.device_testing_state.get(serial, False): break
-                        time.sleep(3)
-                        
-                        cr_size = self._get_file_size(serial, f"/sdcard/Download/{dl_file}.crdownload")
-                        part_size = self._get_file_size(serial, f"/sdcard/Download/{dl_file}.part")
-                        final_size = self._get_file_size(serial, f"/sdcard/Download/{dl_file}")
-                        
-                        current_size = 0
-                        is_temp = False
-                        
-                        if cr_size > 0 or part_size > 0:
-                            current_size = max(cr_size, part_size)
-                            is_temp = True
-                        else:
-                            current_size = final_size
-                            
-                        if current_size > 0:
-                            if total_bytes > 0:
-                                pct = min(100.0, (current_size / total_bytes) * 100)
-                                self.ui_log(f"   ... Browser downloading: {current_size/(1024*1024):.1f} MB / {total_bytes/(1024*1024):.1f} MB ({pct:.1f}%)", serial, run_log_file)
-                            else:
-                                self.ui_log(f"   ... Browser downloading: {current_size/(1024*1024):.1f} MB", serial, run_log_file)
-                                
-                            if not is_temp and current_size == last_size:
-                                stable_count += 1
-                                if stable_count >= 2: 
-                                    downloaded = True
-                                    break
-                            else:
-                                stable_count = 0
-                        else:
-                            self.ui_log(f"   ... Waiting for browser to start download...", serial, run_log_file)
-                            
-                        last_size = current_size
-                            
-                    if not self.device_testing_state.get(serial, False): break
-                    
-                    self.run_adb(["shell", "am", "force-stop", "com.android.chrome"], serial=serial)
-                    self.run_adb(["shell", "am", "force-stop", "com.android.browser"], serial=serial)
-                    self.run_adb(["shell", "am", "force-stop", "org.mozilla.firefox"], serial=serial)
-                    
-                    if downloaded:
-                        size_mb = last_size / (1024 * 1024)
-                        elapsed = time.time() - start_time
-                        self.ui_log(f"✅ Browser downloaded {size_mb:.2f} MB in {elapsed:.1f}s", serial, run_log_file)
-                    else:
-                        raise Exception(f"Cycle {i} Error: Browser download timed out after {dl_timeout}s.")
-                    
-                    if dl_delete_after:
-                        self.ui_log(f"🧹 Cycle {i} finished. Cleaning up downloaded files...", serial, run_log_file)
-                        self.run_adb(["shell", "rm", "-f", f"/sdcard/Download/{base_name}*"], serial=serial)
-                    
-                    time.sleep(2)
-                    completed = i
-
-            elif test_type == "Microphone Audio HAL Stress":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Opening Audio HAL & Recording (3s) ---", serial, run_log_file)
-                    
-                    cmd_mic = ["adb", "-s", serial, "shell", "tinycap /data/local/tmp/mic_stress.wav"]
-                    mic_proc = subprocess.Popen(cmd_mic, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **get_cflags())
-                    for _ in range(3):
-                        if not self.device_testing_state.get(serial, False): break
-                        time.sleep(1)
-                        
-                    try: mic_proc.terminate()
-                    except: pass
-                    self.run_adb(["shell", "killall", "tinycap"], serial=serial, capture=False)
-                    
-                    time.sleep(1)
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Deleting Audio File ---", serial, run_log_file)
-                    self.run_adb(["shell", "rm", "-f", "/data/local/tmp/mic_stress.wav"], serial=serial)
-                    time.sleep(2)
-                    completed = i
-
-            elif test_type == "Mic/Camera Privacy Toggle":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Enable Privacy Mute (Sensors OFF) ---", serial, run_log_file)
-                    self.run_adb(["shell", "cmd", "sensor_privacy", "enable", "microphone"], serial=serial)
-                    self.run_adb(["shell", "cmd", "sensor_privacy", "enable", "camera"], serial=serial)
-                    time.sleep(3)
-                    
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Disable Privacy Mute (Sensors ON) ---", serial, run_log_file)
-                    self.run_adb(["shell", "cmd", "sensor_privacy", "disable", "microphone"], serial=serial)
-                    self.run_adb(["shell", "cmd", "sensor_privacy", "disable", "camera"], serial=serial)
-                    time.sleep(3)
-                    completed = i
-
-            elif test_type == "Standalone: WiFi ON/OFF":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Disable WiFi ---", serial, run_log_file)
-                    self.run_adb(["shell", "svc", "wifi", "disable"], serial=serial)
-                    time.sleep(3)
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Enable WiFi ---", serial, run_log_file)
-                    self.run_adb(["shell", "svc", "wifi", "enable"], serial=serial)
-                    time.sleep(5)
-                    completed = i
-
-            elif test_type == "Standalone: Bluetooth ON/OFF":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Disable Bluetooth ---", serial, run_log_file)
-                    self.run_adb(["shell", "svc", "bluetooth", "disable"], serial=serial)
-                    time.sleep(3)
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Enable Bluetooth ---", serial, run_log_file)
-                    self.run_adb(["shell", "svc", "bluetooth", "enable"], serial=serial)
-                    time.sleep(5)
-                    completed = i
-
-            elif test_type == "Standalone: Mobile Data Toggle":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Disable Mobile Data ---", serial, run_log_file)
-                    self.run_adb(["shell", "svc", "data", "disable"], serial=serial)
-                    time.sleep(3)
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Enable Mobile Data ---", serial, run_log_file)
-                    self.run_adb(["shell", "svc", "data", "enable"], serial=serial)
-                    time.sleep(5)
-                    completed = i
-
-            elif test_type == "Screen Sleep/Wake":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Turn off screen ---", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "223"], serial=serial)
-                    
-                    self.ui_log(f"Sleeping for {sleep_sec}s...", serial, run_log_file)
-                    for _ in range(sleep_sec):
-                        if not self.device_testing_state.get(serial, False): break
-                        time.sleep(1)
-                        
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Wake up screen ---", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
-                    
-                    time.sleep(2) 
-                    power_state = self.run_adb(["shell", "dumpsys", "power"], serial=serial)
-                    if not power_state:
-                        raise Exception(f"Cycle {i} Error: ADB disconnected or device frozen.")
-                    if "mWakefulness=Awake" not in power_state:
-                        raise Exception(f"Cycle {i} Wakeup Fail: Stuck in sleep state.")
-                    
-                    self.ui_log(f"Keeping screen ON for {wake_sec}s...", serial, run_log_file)
-                    for _ in range(wake_sec):
-                        if not self.device_testing_state.get(serial, False): break
-                        time.sleep(1)
-                        
-                    completed = i
-
-            elif test_type == "Gallery UI Tap":
-                self.run_adb(["shell", "input", "keyevent", "224"], serial=serial) 
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Gallery ---", serial, run_log_file)
-                    self.run_adb(["shell", "monkey", "-p", "com.google.android.apps.photos", "-c", "android.intent.category.LAUNCHER", "1"], serial=serial)
-                    time.sleep(4)
-                    for action in [("tap", "300 800", 2), ("tap", "500 500", 2), ("tap", "300 2000", 3), ("tap", "500 2000", 2)]:
-                        if not self.device_testing_state.get(serial, False): break
-                        self.run_adb(["shell", "input", action[0]] + action[1].split(), serial=serial)
-                        time.sleep(action[2])
-                    self.run_adb(["shell", "input", "keyevent", "4"], serial=serial)
-                    time.sleep(2)
-                    completed = i
-
-            elif test_type == "App Cold-Start & Kill":
-                pkgs = [x.strip() for x in kw["pkgs_str"].split(",") if x.strip()]
-                if not pkgs: raise Exception("Target Package is required!")
-                pkg = pkgs[0] 
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Force-Stopping App [{pkg}] ---", serial, run_log_file)
-                    self.run_adb(["shell", "am", "force-stop", pkg], serial=serial)
-                    time.sleep(2)
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Cold-Starting App [{pkg}] ---", serial, run_log_file)
-                    self.run_adb(["shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1"], serial=serial)
-                    time.sleep(5) 
-                    completed = i
-
-            elif test_type == "App Clear Data & Restart":
-                pkgs = [x.strip() for x in kw["pkgs_str"].split(",") if x.strip()]
-                if not pkgs: raise Exception("Target Package is required!")
-                pkg = pkgs[0] 
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Wiping Data for [{pkg}] ---", serial, run_log_file)
-                    self.run_adb(["shell", "pm", "clear", pkg], serial=serial)
-                    time.sleep(2)
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Starting App [{pkg}] ---", serial, run_log_file)
-                    self.run_adb(["shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1"], serial=serial)
-                    time.sleep(5) 
-                    completed = i
-
-            elif test_type == "Battery Spoofing & Power State":
-                for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Spoofing 5% Battery ---", serial, run_log_file)
-                    self.run_adb(["shell", "dumpsys", "battery", "unplug"], serial=serial)
-                    self.run_adb(["shell", "dumpsys", "battery", "set", "level", "5"], serial=serial)
-                    time.sleep(5)
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Resetting Battery State ---", serial, run_log_file)
-                    self.run_adb(["shell", "dumpsys", "battery", "reset"], serial=serial)
-                    time.sleep(5)
-                    completed = i
-
             elif test_type == "CPU Thermal Throttling (Mins)":
                 self.ui_log(f"🔥 Spawning heavy processes...", serial, run_log_file)
                 for _ in range(4):
@@ -2189,9 +1950,9 @@ class ADBStressGUI:
                 
                 for m in range(target_val):
                     for s in range(60): 
-                        if not self.device_testing_state.get(serial, False): break
+                        if self.device_stop_event.get(serial, False): break
                         time.sleep(1)
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     
                     temp_raw = self.run_adb(["shell", "cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null"], serial=serial)
                     temps = []
@@ -2221,9 +1982,237 @@ class ADBStressGUI:
                             
                     completed = m + 1
 
+            elif test_type == "Audio - Playback & Controls Stress":
+                self.ui_log(f"🎵 Pushing selected audio file to {kw['audio_remote_path']}...", serial, run_log_file)
+                self.run_adb(["push", kw["audio_local_path"], kw["audio_remote_path"]], serial=serial)
+                time.sleep(2)
+                
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Auto-launching Audio File via Native Engine ---", serial, run_log_file)
+                    
+                    self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
+                    self.run_adb(["shell", f"stagefright -a -o {kw['audio_remote_path']} &"], serial=serial, capture=False)
+                    
+                    self.ui_log(f"▶️ Playback started. Testing volume controls...", serial, run_log_file)
+                    time.sleep(3)
+                    
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"🔊 Max Volume", serial, run_log_file)
+                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "24"], serial=serial)
+                    time.sleep(5)
+                    
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"🔈 Min Volume", serial, run_log_file)
+                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "25"], serial=serial)
+                    time.sleep(5)
+                    
+                    self.ui_log(f"⏹️ Stopping playback...", serial, run_log_file)
+                    self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
+                    time.sleep(2)
+                    completed = i
+
+            elif test_type == "Audio - Background Play & Screen Lock":
+                self.ui_log(f"🎵 Pushing selected audio file to {kw['audio_remote_path']}...", serial, run_log_file)
+                self.run_adb(["push", kw["audio_local_path"], kw["audio_remote_path"]], serial=serial)
+                time.sleep(2)
+                
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Start Background Music via Native Engine ---", serial, run_log_file)
+                    
+                    self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
+                    self.run_adb(["shell", f"stagefright -a -o {kw['audio_remote_path']} &"], serial=serial, capture=False)
+                    time.sleep(2)
+                    
+                    self.ui_log(f"🔒 Locking Screen for 2 minutes...", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "223"], serial=serial)
+                    
+                    for _ in range(120):
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(1)
+                        
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"🔓 Waking Screen & Unlocking", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
+                    time.sleep(1)
+                    self.run_adb(["shell", "input", "keyevent", "82"], serial=serial)
+                    
+                    self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
+                    completed = i
+
+            elif test_type == "Camera - Front/Rear":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Front Camera (Photo) ---", serial, run_log_file)
+                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE", "--ei", "android.intent.extras.CAMERA_FACING", "1"], serial=serial)
+                    time.sleep(4)
+                    
+                    self.ui_log("📸 Taking 2 Photos...", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
+                    time.sleep(2)
+                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
+                    time.sleep(2)
+                    
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Rear Camera (Video) ---", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
+                    time.sleep(1)
+                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.VIDEO_CAPTURE", "--ei", "android.intent.extras.CAMERA_FACING", "0"], serial=serial)
+                    time.sleep(4)
+                    
+                    self.ui_log("🎥 Recording Video for 5 seconds...", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
+                    time.sleep(5)
+                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
+                    time.sleep(2)
+                    
+                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
+                    completed = i
+
+            elif test_type == "Camera - Continuous Shooting (100 shots)":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Continuous Shooting (100 shots) ---", serial, run_log_file)
+                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE"], serial=serial)
+                    time.sleep(4)
+                    
+                    self.ui_log("📸 Triggering 100 rapid shots...", serial, run_log_file)
+                    for _ in range(100):
+                        if self.device_stop_event.get(serial, False): break
+                        self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
+                        
+                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
+                    time.sleep(2)
+                    completed = i
+
+            elif test_type == "Camera - Switch Storage Space (Ext/Int)":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Storage Switch (Note: Requires native camera support) ---", serial, run_log_file)
+                    
+                    self.ui_log("💾 Switching to External Storage (Simulated via property)...", serial, run_log_file)
+                    self.run_adb(["shell", "setprop", "sys.camera.storage", "sdcard"], serial=serial)
+                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE"], serial=serial)
+                    time.sleep(4)
+                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
+                    time.sleep(2)
+                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
+                    
+                    self.ui_log("💾 Switching to Internal Storage (Built-in)...", serial, run_log_file)
+                    self.run_adb(["shell", "setprop", "sys.camera.storage", "internal"], serial=serial)
+                    self.run_adb(["shell", "am", "start", "-a", "android.media.action.IMAGE_CAPTURE"], serial=serial)
+                    time.sleep(4)
+                    self.run_adb(["shell", "input", "keyevent", "27"], serial=serial)
+                    time.sleep(2)
+                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial)
+                    
+                    completed = i
+
+            elif test_type == "Fingerprint HAL Stress":
+                self.ui_log(f"💡 [Interactive Test] You can touch the fingerprint sensor anytime during the test to check responsiveness.", serial, run_log_file)
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Fingerprint HAL Polling & Screen Off ---", serial, run_log_file)
+                    
+                    fp_out = self.run_adb(["shell", "dumpsys", "fingerprint"], serial=serial)
+                    if "Can't find service" in fp_out or not fp_out.strip():
+                        fp_out = self.run_adb(["shell", "dumpsys", "biometric"], serial=serial)
+                        
+                    if "Can't find service" in fp_out or not fp_out.strip():
+                        self.ui_log("⚠️ Warning: Unable to retrieve Fingerprint/Biometric service state (HAL may have crashed or sensor is absent)", serial, run_log_file)
+                    else:
+                        self.ui_log("✅ Fingerprint Service is ALIVE.", serial, run_log_file)
+                        
+                    self.run_adb(["shell", "input", "keyevent", "223"], serial=serial)
+                    
+                    self.ui_log(f"Sleeping for {sleep_sec}s...", serial, run_log_file)
+                    for _ in range(sleep_sec):
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(1)
+
+                    if self.device_stop_event.get(serial, False): break
+                    
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Wake up screen ---", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
+
+                    self.ui_log(f"Holding screen ON for {wake_sec}s...", serial, run_log_file)
+                    for _ in range(wake_sec):
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(1)
+
+                    completed = i
+
+            elif test_type == "Microphone Audio HAL Stress":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Opening Audio HAL & Recording (3s) ---", serial, run_log_file)
+                    
+                    cmd_mic = ["adb", "-s", serial, "shell", "tinycap /data/local/tmp/mic_stress.wav"]
+                    mic_proc = subprocess.Popen(cmd_mic, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **get_cflags())
+                    for _ in range(3):
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(1)
+                        
+                    try: mic_proc.terminate()
+                    except: pass
+                    self.run_adb(["shell", "killall", "tinycap"], serial=serial, capture=False)
+                    
+                    time.sleep(1)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Deleting Audio File ---", serial, run_log_file)
+                    self.run_adb(["shell", "rm", "-f", "/data/local/tmp/mic_stress.wav"], serial=serial)
+                    time.sleep(2)
+                    completed = i
+
+            elif test_type == "Mic/Camera Privacy Toggle":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Enable Privacy Mute (Sensors OFF) ---", serial, run_log_file)
+                    self.run_adb(["shell", "cmd", "sensor_privacy", "enable", "microphone"], serial=serial)
+                    self.run_adb(["shell", "cmd", "sensor_privacy", "enable", "camera"], serial=serial)
+                    time.sleep(3)
+                    
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Disable Privacy Mute (Sensors ON) ---", serial, run_log_file)
+                    self.run_adb(["shell", "cmd", "sensor_privacy", "disable", "microphone"], serial=serial)
+                    self.run_adb(["shell", "cmd", "sensor_privacy", "disable", "camera"], serial=serial)
+                    time.sleep(3)
+                    completed = i
+
+            elif test_type == "Standalone: WiFi ON/OFF":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Disable WiFi ---", serial, run_log_file)
+                    self.run_adb(["shell", "svc", "wifi", "disable"], serial=serial)
+                    time.sleep(3)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Enable WiFi ---", serial, run_log_file)
+                    self.run_adb(["shell", "svc", "wifi", "enable"], serial=serial)
+                    time.sleep(5)
+                    completed = i
+
+            elif test_type == "Standalone: Bluetooth ON/OFF":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Disable Bluetooth ---", serial, run_log_file)
+                    self.run_adb(["shell", "svc", "bluetooth", "disable"], serial=serial)
+                    time.sleep(3)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Enable Bluetooth ---", serial, run_log_file)
+                    self.run_adb(["shell", "svc", "bluetooth", "enable"], serial=serial)
+                    time.sleep(5)
+                    completed = i
+
+            elif test_type == "Standalone: Mobile Data Toggle":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Disable Mobile Data ---", serial, run_log_file)
+                    self.run_adb(["shell", "svc", "data", "disable"], serial=serial)
+                    time.sleep(3)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Enable Mobile Data ---", serial, run_log_file)
+                    self.run_adb(["shell", "svc", "data", "enable"], serial=serial)
+                    time.sleep(5)
+                    completed = i
+                    
             elif test_type == "Standalone: Airplane Mode Toggle":
                 for i in range(1, target_val + 1):
-                    if not self.device_testing_state.get(serial, False): break
+                    if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"--- Cycle {i}/{target_val} : Airplane Mode ON ---", serial, run_log_file)
                     self.run_adb(["shell", "settings", "put", "global", "airplane_mode_on", "1"], serial=serial)
                     self.run_adb(["shell", "am", "broadcast", "-a", "android.intent.action.AIRPLANE_MODE", "--ez", "state", "true"], serial=serial)
@@ -2234,7 +2223,10 @@ class ADBStressGUI:
                     time.sleep(4)
                     completed = i
 
-            status = "PASS"
+            if completed == 0 and not self.device_stop_event.get(serial, False):
+                raise Exception("Test completed 0 cycles/mins. Logical execution failed.")
+            else:
+                status = "PASS"
 
         except Exception as e:
             status = "FAIL"
@@ -2242,7 +2234,7 @@ class ADBStressGUI:
             self.ui_log(f"❌ Exception: {err_msg}", serial, run_log_file)
             
         finally:
-            if not self.device_testing_state.get(serial, False) and status != "FAIL":
+            if self.device_stop_event.get(serial, False) and status != "FAIL":
                 status = "STOPPED"
                 
             if serial in self.logcat_procs:
@@ -2291,10 +2283,17 @@ class ADBStressGUI:
             self.run_adb(["shell", "killall", "cat"], serial=serial, capture=False)
             self.run_adb(["shell", "killall", "md5sum"], serial=serial, capture=False)
             self.run_adb(["shell", "dumpsys", "battery", "reset"], serial=serial, capture=False)
+            self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
             self.run_adb(["shell", "killall", "tinycap"], serial=serial, capture=False)
             
-            # 🌟 OSD Clean up
             self.run_adb(["shell", "am", "force-stop", "com.tpm.osd"], serial=serial, capture=False)
+
+            try:
+                if "Audio" in test_type:
+                    audio_remote = kw.get("audio_remote_path", "").strip()
+                    if audio_remote:
+                        self.run_adb(["shell", "rm", "-f", audio_remote], serial=serial, capture=False)
+            except: pass
 
             if device_ready:
                 self.ui_log("⏳ Fetching Bugreport...", serial, run_log_file)
@@ -2311,6 +2310,7 @@ class ADBStressGUI:
             if os.path.exists(run_log_file): os.rename(run_log_file, final_log_file)
 
             self.device_testing_state[serial] = False
+            self.device_stop_event[serial] = False
             self.devices_status[serial] = "Idle"
             self.root.after(0, self.update_listbox_display)
 
@@ -2322,8 +2322,9 @@ class ADBStressGUI:
         stopped_count = 0
         for serial in target_serials:
             if self.device_testing_state.get(serial, False):
-                self.ui_log(f"🛑 Stopping test on device [{serial}]...")
-                self.device_testing_state[serial] = False 
+                self.ui_log(f"🛑 Stopping test on device [{serial}]... (Waiting for background tasks to finish)")
+                self.device_stop_event[serial] = True 
+                self.devices_status[serial] = "Stopping..."
                 
                 if serial in self.monkey_procs:
                     try: self.monkey_procs[serial].terminate()
@@ -2334,6 +2335,7 @@ class ADBStressGUI:
                     
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "dd"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=s, capture=False), daemon=True).start()
+                threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "stagefright"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "tinycap"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "curl"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "wget"], serial=s, capture=False), daemon=True).start()
@@ -2345,6 +2347,7 @@ class ADBStressGUI:
                 stopped_count += 1
                 
         if stopped_count > 0:
+            self.update_listbox_display()
             self.ui_log(f"✅ Interrupt signals sent to {stopped_count} device(s).")
         else:
             self.ui_log("⚠️ Selected devices are currently idle. Nothing to stop.")
