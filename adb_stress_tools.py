@@ -45,7 +45,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 class ADBStressGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Android ADB Stress Test Console v4.0.18")
+        self.root.title("Android ADB Stress Test Console v4.1.0")
         self.root.geometry("1150x980")
         
         try: self.root.iconbitmap("app_icon.ico")
@@ -281,7 +281,7 @@ class ADBStressGUI:
         af2 = tk.Frame(self.audio_frame); af2.pack(fill=tk.X, pady=(5,0))
         tk.Label(af2, text="Device Dest Path:").pack(side=tk.LEFT)
         self.entry_audio_remote = tk.Entry(af2, font=("Arial", 10))
-        self.entry_audio_remote.insert(0, "/sdcard/Music/test_audio.mp3")
+        self.entry_audio_remote.insert(0, "/sdcard/Download/test_audio.mp3")
         self.entry_audio_remote.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
 
         self.mdm_frame = tk.LabelFrame(control_frame, text="MDM Test Settings & Provisioning", padx=10, pady=10)
@@ -745,12 +745,13 @@ class ADBStressGUI:
 
     def _cleanup_device_force(self, serial):
         self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=serial, capture=False)
-        self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
+        self.run_adb(["shell", "killall", "tinyplay"], serial=serial, capture=False)
         self.run_adb(["shell", "killall", "tinycap"], serial=serial, capture=False)
         self.run_adb(["shell", "killall", "curl"], serial=serial, capture=False)
         self.run_adb(["shell", "killall", "wget"], serial=serial, capture=False)
         self.run_adb(["shell", "killall", "dd"], serial=serial, capture=False)
         self.run_adb(["shell", "rm", "-f", "/data/local/tmp/oom_fill*"], serial=serial, capture=False) 
+        self.run_adb(["shell", "dumpsys", "battery", "reset"], serial=serial, capture=False)
         
         self.run_adb(["shell", "am", "force-stop", "com.android.chrome"], serial=serial, capture=False)
         
@@ -1041,6 +1042,10 @@ class ADBStressGUI:
         if "Audio" in test_type:
             if not kwargs["audio_local_path"] or not os.path.exists(kwargs["audio_local_path"]):
                 return messagebox.showerror("Error", "Please select a valid local Audio file for playback testing!")
+            
+            # v4.1.0: 強制使用 /sdcard/Download 或 Music 來避開 Scoped Storage 限制
+            if not kwargs["audio_remote_path"].startswith("/sdcard/"):
+                kwargs["audio_remote_path"] = "/sdcard/Download/test_audio.mp3"
         
         system_apps_list = []
         if ("Monkey" in test_type or "OOM" in test_type) and self.skip_sys_apps_var.get():
@@ -1370,16 +1375,6 @@ class ADBStressGUI:
                     self.run_adb(["shell", "rm", "-f", "/data/local/tmp/wifi_dl_*.tmp"], serial=serial)
                     completed = i
 
-            elif test_type == "Brightness Random Toggle Stress":
-                for i in range(1, target_val + 1):
-                    if self.device_stop_event.get(serial, False): break
-                    rand_brightness = random.randint(10, 255)
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Set Brightness to {rand_brightness}/255 ---", serial, run_log_file)
-                    self.run_adb(["shell", "cmd", "display", "set-brightness", str(rand_brightness/255.0)], serial=serial)
-                    self.run_adb(["shell", "settings", "put", "system", "screen_brightness", str(rand_brightness)], serial=serial)
-                    time.sleep(1)
-                    completed = i
-
             elif test_type == "[APM] Connectivity (WiFi/BT/Airplane) Toggle":
                 do_wifi = kw.get("apm_wifi", True)
                 do_bt = kw.get("apm_bt", True)
@@ -1498,517 +1493,89 @@ class ADBStressGUI:
                     time.sleep(2)
                     completed = i
 
-            elif test_type in ["Reboot & Shutdown Stress", "[APM] System Restart & Shutdown Stress"]:
-                for i in range(1, target_val + 1):
-                    if self.device_stop_event.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Issuing Reboot Command ---", serial, run_log_file)
-                    
-                    self.run_adb(["reboot"], serial=serial)
-                    
-                    self.ui_log("⏳ Waiting for device to disconnect...", serial, run_log_file)
-                    offline_wait_start = time.time()
-                    is_offline = False
-                    while time.time() - offline_wait_start < 120:
-                        if self.device_stop_event.get(serial, False): break
-                        ping = self.run_adb(["shell", "echo", "ping"], serial=serial, timeout=3)
-                        if "ping" not in ping:
-                            is_offline = True
-                            break
-                        time.sleep(2)
-                        
-                    if not is_offline and not self.device_stop_event.get(serial, False):
-                        raise Exception(f"Cycle {i} Error: Device refused to reboot (Hang up detected).")
-
-                    self.ui_log("🔌 Device offline. Waiting for boot & reconnect (Timeout 15 mins)...", serial, run_log_file)
-                    time.sleep(15)
-                    
-                    wait_start = time.time()
-                    device_online = False
-                    
-                    while time.time() - wait_start < 900:
-                        if self.device_stop_event.get(serial, False): break
-                        
-                        if ":" in serial:
-                            try:
-                                subprocess.run(["adb", "disconnect", serial], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **get_cflags())
-                                subprocess.run(["adb", "connect", serial], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, **get_cflags())
-                            except:
-                                pass 
-                        
-                        sys_boot = self.run_adb(["shell", "getprop", "sys.boot_completed"], serial=serial)
-                        anim_state = self.run_adb(["shell", "getprop", "init.svc.bootanim"], serial=serial)
-                        
-                        if "1" in sys_boot and "stopped" in anim_state:
-                            win_check = self.run_adb(["shell", "dumpsys", "window", "displays"], serial=serial)
-                            if "DisplayContents" in win_check or "Display" in win_check:
-                                device_online = True
-                                break
-                            
-                        time.sleep(5)
-                        
-                    if self.device_stop_event.get(serial, False): break
-                    
-                    if not device_online:
-                        check_conn = self.run_adb(["shell", "echo", "ping"], serial=serial)
-                        if "ping" in check_conn:
-                            raise Exception(f"Cycle {i} Error: Device is stuck in BOOTLOOP or Boot Anim! (ADB connected but UI failed)")
-                        else:
-                            raise Exception(f"Cycle {i} Error: Device failed to connect within 15 mins. (Shutdown or Hang up)")
-                        
-                    self.ui_log(f"✅ Device boot completed and UI ready. Holding for {reboot_up} sec...", serial, run_log_file)
-                    
-                    for remain in range(reboot_up, 0, -1):
-                        if self.device_stop_event.get(serial, False): break
-                        if remain % 5 == 0 or remain <= 5:
-                            self.ui_log(f"   ... Waiting {remain} sec", serial, run_log_file)
-                        time.sleep(1)
-                        
-                    if self.device_stop_event.get(serial, False): break
-                    
-                    if do_shutdown:
-                        self.ui_log(f"--- Cycle {i}/{target_val} : Issuing Shutdown Command (reboot -p) ---", serial, run_log_file)
-                        self.run_adb(["shell", "reboot", "-p"], serial=serial)
-                        
-                        self.ui_log(f"⏳ Device shutting down. Holding for {reboot_down} sec before next reboot...", serial, run_log_file)
-                        for remain in range(reboot_down, 0, -1):
-                            if self.device_stop_event.get(serial, False): break
-                            if remain % 5 == 0 or remain <= 5:
-                                self.ui_log(f"   ... {remain} sec remaining until next cycle", serial, run_log_file)
-                            time.sleep(1)
-                    else:
-                        self.ui_log(f"⏳ Skipping Shutdown phase. Waiting {reboot_down} sec interval before next Reboot...", serial, run_log_file)
-                        for remain in range(reboot_down, 0, -1):
-                            if self.device_stop_event.get(serial, False): break
-                            if remain % 5 == 0 or remain <= 5:
-                                self.ui_log(f"   ... {remain} sec remaining until next Reboot", serial, run_log_file)
-                            time.sleep(1)
-                        
-                    completed = i
-
-            elif test_type == "MDM Framework Stress (Work Profile)":
-                if kw["install_mdm"]:
-                    self.ui_log("🛡️ Disabling Google Play Protect to bypass 'Install Anyway' prompt...", serial, run_log_file)
-                    self.run_adb(["shell", "settings", "put", "global", "package_verifier_enable", "0"], serial=serial)
-                    self.run_adb(["shell", "settings", "put", "global", "verifier_verify_adb_installs", "0"], serial=serial)
-                    
-                    self.ui_log(f"📦 Auto-Installing MDM APK (-g -d -t): {kw['mdm_apk']}...", serial, run_log_file)
-                    install_out = self.run_adb(["install", "-r", "-t", "-d", "-g", kw["mdm_apk"]], serial=serial, timeout=120)
-                    if "Success" not in install_out:
-                        raise Exception(f"Failed to install MDM APK. ADB Output: {install_out}")
-                    self.ui_log("✅ MDM APK Installed and Runtime Permissions auto-granted successfully.", serial, run_log_file)
-
-                pkg_name = kw["mdm_comp"].split("/")[0] if "/" in kw["mdm_comp"] else "com.mdm.client"
-                
-                dp_check = self.run_adb(["shell", "dumpsys", "device_policy"], serial=serial)
-                if kw["mdm_comp"] in dp_check and "Device Owner:" in dp_check:
-                    self.ui_log("🧹 [Android Restriction Bypass] Detected existing Device Owner. Removing it to unlock Work Profile creation...", serial, run_log_file)
-                    self.run_adb(["shell", "dpm", "remove-active-admin", kw["mdm_comp"]], serial=serial)
-                    time.sleep(3)
-
-                if kw["set_owner"]:
-                    self.ui_log("🔍 [Smart Check] Verifying 'testOnly' flag in installed package...", serial, run_log_file)
-                    pkg_dump = self.run_adb(["shell", "dumpsys", "package", pkg_name], serial=serial)
-                    if "TEST_ONLY" not in pkg_dump and "testOnly=true" not in pkg_dump.replace(" ", "") and "test_only" not in pkg_dump.lower():
-                        err_msg = (f"FATAL: The installed APK is MISSING the 'android:testOnly=\"true\"' flag!\n\n"
-                                   f"Android OS completely rejects setting a Device Owner if this flag is missing.\n"
-                                   f"💡 SOLUTION: Please ask RD for an APK explicitly built with the testOnly flag retained.")
-                        raise Exception(err_msg)
-
-                out_users = self.run_adb(["shell", "pm", "list", "users"], serial=serial)
-                for line in out_users.splitlines():
-                    if "MDM_Stress" in line:
-                        try:
-                            uid = line.split("{")[1].split(":")[0]
-                            self.run_adb(["shell", "pm", "remove-user", uid], serial=serial)
-                        except: pass
-
-                self.ui_log(f"🔑 Granting READ_LOGS permission to {pkg_name}...", serial, run_log_file)
-                self.run_adb(["shell", "pm", "grant", pkg_name, "android.permission.READ_LOGS"], serial=serial)
+            # ===============================================
+            # [Audio & Media Stress Logic]
+            # ===============================================
             
-                for i in range(1, target_val + 1):
-                    if self.device_stop_event.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Setting up Managed Work Profile ---", serial, run_log_file)
-                    
-                    out = self.run_adb(["shell", "pm", "create-user", "--profileOf", "0", "--managed", "MDM_Stress"], serial=serial)
-                    if "Success: created user id" not in out:
-                        if "no_add_managed_profile" in out:
-                            err_msg = (f"Cycle {i} Error: Android blocked Work Profile creation.\n"
-                                       f"Reason: 'no_add_managed_profile' is enabled. This means another Device Owner or Policy is blocking this action.\n"
-                                       f"💡 Solution: Please FACTORY RESET the device, skip all account logins, and try again!\n"
-                                       f"Output: {out}")
-                            raise Exception(err_msg)
-                        else:
-                            raise Exception(f"Cycle {i} Error: Failed to create Managed Profile. Device might not support Multi-User or DPM. Output: {out}")
-                    
-                    try:
-                        user_id = out.split("id")[1].strip()
-                    except:
-                        raise Exception(f"Cycle {i} Error: Could not parse User ID from: {out}")
-                        
-                    self.ui_log(f"✅ Work Profile created with User ID: {user_id}. Starting user...", serial, run_log_file)
-                    self.run_adb(["shell", "am", "start-user", user_id], serial=serial)
-                    time.sleep(3)
-                    
-                    if kw["set_owner"]:
-                        self.ui_log(f"📦 Installing MDM payload into new Work Profile (User {user_id})...", serial, run_log_file)
-                        self.run_adb(["shell", "pm", "install-existing", "--user", user_id, pkg_name], serial=serial)
-                        time.sleep(2)
-                        
-                        self.ui_log(f"👑 Setting Profile Owner for Work Profile (User {user_id})...", serial, run_log_file)
-                        dpm_out = self.run_adb(["shell", "dpm", "set-profile-owner", "--user", user_id, kw["mdm_comp"]], serial=serial)
-                        if "Success" not in dpm_out and "already" not in dpm_out.lower():
-                            self.ui_log(f"⚠️ Failed to set Profile Owner. Output: {dpm_out}", serial, run_log_file)
-                    
-                    self.ui_log(f"⏳ Holding MDM state active for {sleep_sec}s...", serial, run_log_file)
-                    for _ in range(sleep_sec):
-                        if self.device_stop_event.get(serial, False): break
-                        time.sleep(1)
-                        
-                    if self.device_stop_event.get(serial, False): break
-                        
-                    self.ui_log(f"🧹 Tearing down Work Profile (User ID: {user_id})...", serial, run_log_file)
-                    self.run_adb(["shell", "pm", "remove-user", user_id], serial=serial)
-                    time.sleep(2) 
-                    completed = i
-
-            elif test_type == "Storage Fake OOM Fill (%)":
-                for i in range(1, target_val + 1):
-                    if self.device_stop_event.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Storage OOM Fill (Target: {oom_pct}%) ---", serial, run_log_file)
-                    
-                    self.run_adb(["shell", "rm", "-f", "/data/local/tmp/oom_fill*"], serial=serial)
-                    
-                    total_mb, free_mb = self._get_storage_info(serial)
-                    if total_mb <= 0:
-                        raise Exception(f"Cycle {i} Error: Cannot retrieve storage info.")
-                        
-                    current_used_mb = total_mb - free_mb
-                    target_used_mb = total_mb * (oom_pct / 100.0)
-                    mb_to_fill = int(target_used_mb - current_used_mb)
-                    
-                    if mb_to_fill <= 0:
-                        self.ui_log(f"⚠️ Storage already at {current_used_mb/total_mb*100:.1f}%. Skipping filling step.", serial, run_log_file)
-                    else:
-                        self.ui_log(f"⏳ Dynamic Calc: Total {total_mb:.1f}MB, Free {free_mb:.1f}MB. Filling {mb_to_fill}MB to reach {oom_pct}%...", serial, run_log_file)
-                        start_time = time.time()
-                        
-                        chunk_size = 200
-                        chunks = mb_to_fill // chunk_size
-                        remainder = mb_to_fill % chunk_size
-                        
-                        self.ui_log(f"⏳ Generating payload in {chunk_size}MB chunks to prevent system RAM overflow...", serial, run_log_file)
-
-                        for c in range(int(chunks)):
-                            if self.device_stop_event.get(serial, False): break
-                            cmd_dd = ["adb", "-s", serial, "shell", f"dd if=/dev/zero bs=1048576 count={chunk_size} >> /data/local/tmp/oom_fill.tmp"]
-                            subprocess.run(cmd_dd, capture_output=True, **get_cflags())
-                            cur_mb = (c + 1) * chunk_size
-                            pct = (cur_mb / mb_to_fill) * 100
-                            self.ui_log(f"   ... Filling progress: {cur_mb} MB / {mb_to_fill} MB ({pct:.1f}%)", serial, run_log_file)
-                            time.sleep(0.01)
-
-                        if remainder > 0 and not self.device_stop_event.get(serial, False):
-                            cmd_dd = ["adb", "-s", serial, "shell", f"dd if=/dev/zero bs=1048576 count={int(remainder)} >> /data/local/tmp/oom_fill.tmp"]
-                            subprocess.run(cmd_dd, capture_output=True, **get_cflags())
-                            self.ui_log(f"   ... Filling progress: {mb_to_fill} MB / {mb_to_fill} MB (100.0%)", serial, run_log_file)
-                            time.sleep(0.01)
-                        
-                        if self.device_stop_event.get(serial, False): break
-                        
-                        elapsed = time.time() - start_time
-                        self.ui_log(f"✅ Filled approx. {mb_to_fill} MB in {elapsed:.1f}s", serial, run_log_file)
-                    
-                    hold_seconds = int(oom_mins * 60)
-                    self.ui_log(f"⏳ Holding OOM state for {oom_mins} minutes...", serial, run_log_file)
-                    
-                    oom_monkey_proc = None
-                    if kw["pkgs_str"].strip():
-                        self.ui_log(f"🚀 [OOM-App-Test] Launching Monkey on '{kw['pkgs_str']}' under extreme storage pressure!", serial, run_log_file)
-                        cmd = ["adb", "-s", serial, "shell", "monkey"]
-                        for p in [x.strip() for x in kw["pkgs_str"].split(",") if x.strip()]: 
-                            cmd.extend(["-p", p])
-                        cmd.extend(["--throttle", str(kw["throttle_val"])])
-                        
-                        if kw.get("ignore_crash_val", True):
-                            cmd.extend(["--ignore-crashes", "--ignore-security-exceptions"])
-                        if kw.get("ignore_anr_val", True):
-                            cmd.extend(["--ignore-timeouts"])
-                            
-                        cmd.extend(["-v", "-v", "-v", "999999999"])
-                        
-                        if kw.get("system_apps_list"):
-                            blacklist_path = "/data/local/tmp/sys_blacklist.txt"
-                            local_bl = os.path.join(LOG_DIR, f"blacklist_{safe_serial}.txt")
-                            try:
-                                with open(local_bl, "w", encoding="utf-8") as f:
-                                    f.write("\n".join(kw["system_apps_list"]))
-                                self.run_adb(["push", local_bl, blacklist_path], serial=serial)
-                                cmd.extend(["--pkg-blacklist-file", blacklist_path])
-                                self.ui_log(f"🛡️ Applied {len(kw['system_apps_list'])} system apps to OOM Monkey blacklist.", serial, run_log_file)
-                            except Exception as e:
-                                self.ui_log(f"⚠️ Failed to apply blacklist: {e}", serial, run_log_file)
-
-                        cmd_str = " ".join(cmd[4:])
-                        self.ui_log(f"🚀 [OOM-Monkey CMD] monkey {cmd_str}", serial, run_log_file)
-                        
-                        oom_monkey_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', **get_cflags())
-                        self.monkey_procs[serial] = oom_monkey_proc
-                        
-                        def log_oom_monkey_output(p, s, log_f):
-                            try:
-                                for line in p.stdout:
-                                    if self.device_stop_event.get(s, False): break
-                                    line_str = line.strip()
-                                    if "CRASH" in line_str or "ANR" in line_str or "Exception" in line_str:
-                                        self.ui_log("🔥 [OOM-Monkey-CRASH] " + line_str, s, log_f)
-                                    else:
-                                        with open(log_f, "a", encoding="utf-8") as f:
-                                            f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{s}] [OOM-Monkey] {line_str}\n")
-                            except: pass
-                        
-                        threading.Thread(target=log_oom_monkey_output, args=(oom_monkey_proc, serial, run_log_file), daemon=True).start()
-
-                    for _ in range(hold_seconds):
-                        if self.device_stop_event.get(serial, False): break
-                        time.sleep(1)
-                        
-                    if oom_monkey_proc:
-                        try: oom_monkey_proc.terminate()
-                        except: pass
-                        self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=serial, capture=False)
-                        self.ui_log(f"⏹️ [OOM-App-Test] Monkey test finished.", serial, run_log_file)
-                    
-                    if self.device_stop_event.get(serial, False): break
-                    
-                    self.ui_log(f"🧹 Cycle {i} finished. Cleaning up OOM payload...", serial, run_log_file)
-                    self.run_adb(["shell", "rm", "-f", "/data/local/tmp/oom_fill*"], serial=serial)
-                    completed = i
-
-            elif "Monkey" in test_type:
-                cmd = ["adb", "-s", serial, "shell", "monkey"]
-                if "Specific App" in test_type:
-                    for p in [x.strip() for x in kw["pkgs_str"].split(",") if x.strip()]: 
-                        cmd.extend(["-p", p])
-                cmd.extend(["--throttle", str(kw["throttle_val"])])
-                
-                if kw.get("ignore_crash_val", True):
-                    cmd.extend(["--ignore-crashes", "--ignore-security-exceptions"])
-                if kw.get("ignore_anr_val", True):
-                    cmd.extend(["--ignore-timeouts"])
-                
-                cmd.extend(["-v", "-v", "-v", "999999999"])
-                
-                if kw.get("system_apps_list"):
-                    blacklist_path = "/data/local/tmp/sys_blacklist.txt"
-                    local_bl = os.path.join(LOG_DIR, f"blacklist_{safe_serial}.txt")
-                    try:
-                        with open(local_bl, "w", encoding="utf-8") as f:
-                            f.write("\n".join(kw["system_apps_list"]))
-                        self.run_adb(["push", local_bl, blacklist_path], serial=serial)
-                        cmd.extend(["--pkg-blacklist-file", blacklist_path])
-                        self.ui_log(f"🛡️ Applied {len(kw['system_apps_list'])} system apps to Monkey blacklist.", serial, run_log_file)
-                    except Exception as e:
-                        self.ui_log(f"⚠️ Failed to apply blacklist: {e}", serial, run_log_file)
-
-                cmd_str = " ".join(cmd[4:])
-                self.ui_log(f"🚀 [Monkey CMD] monkey {cmd_str}", serial, run_log_file)
-                
-                self.ui_log(f"🚀 Launching Monkey for {target_val} minutes...", serial, run_log_file)
-                m_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', **get_cflags())
-                self.monkey_procs[serial] = m_proc
-                
-                def log_monkey_output(p, s, log_f):
-                    try:
-                        for line in p.stdout:
-                            if self.device_stop_event.get(s, False): break
-                            self.ui_log("Monkey: " + line.strip(), s, log_f)
-                    except: pass
-                
-                threading.Thread(target=log_monkey_output, args=(m_proc, serial, run_log_file), daemon=True).start()
-                
-                start_time = time.time()
-                target_sec = target_val * 60
-                
-                while m_proc.poll() is None:
-                    if self.device_stop_event.get(serial, False) or time.time() - start_time >= target_sec: break
-                    time.sleep(1)
-                
-                try: m_proc.terminate()
-                except: pass
-                self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=serial, capture=False)
-                
-                actual_elapsed_mins = int((time.time() - start_time) / 60)
-                completed = target_val if (time.time() - start_time) >= target_sec else actual_elapsed_mins
-
-            elif test_type == "Storage I/O Stress (1GB dd)":
-                paths = [p.strip() for p in kw.get("storage_paths", "/data/local/tmp").split(",") if p.strip()]
-                if not paths: paths = ["/data/local/tmp"]
-
-                for i in range(1, target_val + 1):
-                    if self.device_stop_event.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Writing 1GB File to {len(paths)} Storage(s) ---", serial, run_log_file)
-                    
-                    procs = []
-                    for p in paths:
-                        file_path = f"{p}/test_1gb_{i}.tmp"
-                        self.ui_log(f"⏳ Start writing to: {file_path}", serial, run_log_file)
-                        cmd_dd = ["adb", "-s", serial, "shell", f"dd if=/dev/zero of={file_path} bs=1048576 count=1000"]
-                        p_dd = subprocess.Popen(cmd_dd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **get_cflags())
-                        procs.append((p_dd, file_path, p))
-                        
-                        if not kw.get("concurrent_io", False):
-                            while p_dd.poll() is None:
-                                if self.device_stop_event.get(serial, False): break
-                                time.sleep(1)
-                            if self.device_stop_event.get(serial, False): break
-                            out = p_dd.stdout.read().strip() if p_dd.stdout else ""
-                            self.ui_log(f"✅ DD Output [{p}]: {out}", serial, run_log_file)
-                            self.run_adb(["shell", "rm", "-f", file_path], serial=serial)
-                            
-                    if kw.get("concurrent_io", False):
-                        self.ui_log(f"⏳ Waiting for all concurrent writes to finish...", serial, run_log_file)
-                        while any(p_dd.poll() is None for p_dd, _, _ in procs):
-                            if self.device_stop_event.get(serial, False): break
-                            time.sleep(1)
-                        if self.device_stop_event.get(serial, False): break
-                        for p_dd, file_path, p in procs:
-                            out = p_dd.stdout.read().strip() if p_dd.stdout else ""
-                            self.ui_log(f"✅ DD Output [{p}]: {out}", serial, run_log_file)
-                            self.run_adb(["shell", "rm", "-f", file_path], serial=serial)
-                    completed = i
-
-            elif test_type in ["Background Download Stress (curl/wget)"]:
-                if not dl_url: raise Exception("Download URL cannot be empty!")
-                
-                total_bytes = self.get_remote_file_size_pc(dl_url)
-                
-                for i in range(1, target_val + 1):
-                    if self.device_stop_event.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Background Downloading File ---", serial, run_log_file)
-                    
-                    self.run_adb(["shell", "rm", "-f", "/data/local/tmp/dl_stress.tmp"], serial=serial)
-                    start_time = time.time()
-                    
-                    cmd_dl = ["adb", "-s", serial, "shell", f"curl -s -k -L -o /data/local/tmp/dl_stress.tmp {dl_url} || wget -q --no-check-certificate -O /data/local/tmp/dl_stress.tmp {dl_url}"]
-                    dl_proc = subprocess.Popen(cmd_dl, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **get_cflags())
-                    self.dl_procs[serial] = dl_proc
-                    
-                    is_timeout = False
-                    last_check_time = time.time()
-                    
-                    while dl_proc.poll() is None:
-                        if self.device_stop_event.get(serial, False):
-                            try: dl_proc.terminate()
-                            except: pass
-                            self.run_adb(["shell", "killall", "curl"], serial=serial, capture=False)
-                            self.run_adb(["shell", "killall", "wget"], serial=serial, capture=False)
-                            break
-                            
-                        current_time = time.time()
-                        
-                        if current_time - start_time > dl_timeout:
-                            is_timeout = True
-                            try: dl_proc.terminate()
-                            except: pass
-                            self.run_adb(["shell", "killall", "curl"], serial=serial, capture=False)
-                            self.run_adb(["shell", "killall", "wget"], serial=serial, capture=False)
-                            break
-                            
-                        if current_time - last_check_time >= 3.0:
-                            cur_size = self._get_file_size(serial, "/data/local/tmp/dl_stress.tmp")
-                            if total_bytes > 0:
-                                pct = min(100.0, (cur_size / total_bytes) * 100)
-                                self.ui_log(f"   ... Downloading: {cur_size/(1024*1024):.1f} MB / {total_bytes/(1024*1024):.1f} MB ({pct:.1f}%)", serial, run_log_file)
-                            else:
-                                self.ui_log(f"   ... Downloading: {cur_size/(1024*1024):.1f} MB", serial, run_log_file)
-                            last_check_time = current_time
-                            
-                        time.sleep(1)
-                        
-                    if self.device_stop_event.get(serial, False): break
-                    if is_timeout: raise Exception(f"Cycle {i} Error: Download timed out after {dl_timeout}s.")
-                    
-                    size_bytes = self._get_file_size(serial, "/data/local/tmp/dl_stress.tmp")
-                    if size_bytes == 0:
-                        raise Exception(f"Cycle {i} Error: Download failed or file is 0 bytes.")
-                        
-                    elapsed = time.time() - start_time
-                    size_mb = size_bytes / (1024 * 1024)
-                    self.ui_log(f"✅ Downloaded {size_mb:.2f} MB in {elapsed:.1f}s", serial, run_log_file)
-                    
-                    if dl_delete_after:
-                        self.ui_log(f"🧹 Cycle {i} finished. Cleaning up downloaded files...", serial, run_log_file)
-                        self.run_adb(["shell", "rm", "-f", "/data/local/tmp/dl_stress.tmp"], serial=serial)
-                    completed = i
-
-            elif test_type == "CPU Thermal Throttling (Mins)":
-                self.ui_log(f"🔥 Spawning heavy processes...", serial, run_log_file)
-                for _ in range(4):
-                    cmd_cpu = ["adb", "-s", serial, "shell", "cat /dev/urandom | md5sum"]
-                    p = subprocess.Popen(cmd_cpu, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **get_cflags())
-                    self.cpu_procs[serial].append(p)
-                
-                for m in range(target_val):
-                    for s in range(60): 
-                        if self.device_stop_event.get(serial, False): break
-                        time.sleep(1)
-                    if self.device_stop_event.get(serial, False): break
-                    
-                    temp_raw = self.run_adb(["shell", "cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null"], serial=serial)
-                    temps = []
-                    for line in temp_raw.splitlines():
-                        line = line.strip()
-                        if line.isdigit() or (line.startswith('-') and line[1:].isdigit()):
-                            try:
-                                t = float(line)
-                                if t > 1000: t /= 1000.0
-                                if 10 < t < 150: 
-                                    temps.append(t)
-                            except: pass
-                            
-                    if temps:
-                        max_t = max(temps)
-                        self.ui_log(f"--- {m+1}/{target_val} Mins. CPU/SoC Max Temp: {max_t:.1f}°C ---", serial, run_log_file)
-                    else:
-                        dumpsys_out = self.run_adb(["shell", "dumpsys thermalservice | grep -i 'mValue=' | head -n 1"], serial=serial)
-                        if "mValue=" in dumpsys_out:
-                            try:
-                                val = dumpsys_out.split("mValue=")[1].split()[0]
-                                self.ui_log(f"--- {m+1}/{target_val} Mins. ThermalService Temp: {val}°C ---", serial, run_log_file)
-                            except:
-                                self.ui_log(f"--- {m+1}/{target_val} Mins. CPU Temp: [Permission Denied or 0] ---", serial, run_log_file)
-                        else:
-                            self.ui_log(f"--- {m+1}/{target_val} Mins. CPU Temp: [Permission Denied or 0] ---", serial, run_log_file)
-                            
-                    completed = m + 1
-
+            # 🌟 v4.1.0: Audio Smart Intent (Bypass Scoped Storage & Auto-Dismiss Chooser)
             elif test_type == "Audio - Playback & Controls Stress":
                 self.ui_log(f"🎵 Pushing selected audio file to {kw['audio_remote_path']}...", serial, run_log_file)
                 self.run_adb(["push", kw["audio_local_path"], kw["audio_remote_path"]], serial=serial)
                 time.sleep(2)
                 
+                # 觸發媒體掃描，強制系統建立媒體庫索引
+                self.run_adb(["shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", f"\"file://{kw['audio_remote_path']}\""], serial=serial)
+                time.sleep(2)
+
                 for i in range(1, target_val + 1):
                     if self.device_stop_event.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Auto-launching Audio File via Native Engine ---", serial, run_log_file)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Auto-launching Audio File via Generic Intent ---", serial, run_log_file)
                     
-                    self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
-                    self.run_adb(["shell", f"stagefright -a -o {kw['audio_remote_path']} &"], serial=serial, capture=False)
-                    
-                    self.ui_log(f"▶️ Playback started. Testing volume controls...", serial, run_log_file)
+                    # 1. 泛用安全啟動 (避開 FileUriExposedException)
+                    self.run_adb(["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", f"\"file://{kw['audio_remote_path']}\"", "-t", "audio/*"], serial=serial)
                     time.sleep(3)
+                    
+                    self.ui_log(f"▶️ Bypassing Chooser and Forcing Playback...", serial, run_log_file)
+                    # 2. 自動突破「選擇開啟應用程式」視窗 (Tab -> Enter -> Tab -> Enter)
+                    self.run_adb(["shell", "input", "keyevent", "22"], serial=serial, capture=False) # KEYCODE_DPAD_RIGHT
+                    self.run_adb(["shell", "input", "keyevent", "66"], serial=serial, capture=False) # KEYCODE_ENTER
+                    time.sleep(1)
+                    self.run_adb(["shell", "input", "keyevent", "22"], serial=serial, capture=False)
+                    self.run_adb(["shell", "input", "keyevent", "66"], serial=serial, capture=False)
+                    time.sleep(2)
+                    
+                    # 3. 確保音量夠大 (Volume Up x 15)
+                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "24"], serial=serial, capture=False)
+                    
+                    # 4. 強制播放 (送出 Media Play)
+                    self.run_adb(["shell", "input", "keyevent", "126"], serial=serial) # PLAY
+                    
+                    # 5. 螢幕中心盲點擊 (很多 AudioPreview 必須手動點畫面中央的按鈕才會出聲)
+                    try:
+                        wm_size = self.run_adb(["shell", "wm", "size"], serial=serial)
+                        if "Physical size:" in wm_size:
+                            dims = wm_size.split(":")[1].strip().split("x")
+                            cx = int(dims[0]) // 2
+                            cy = int(dims[1]) // 2
+                            self.run_adb(["shell", "input", "tap", str(cx), str(cy)], serial=serial, capture=False)
+                    except:
+                        self.run_adb(["shell", "input", "tap", "500", "1000"], serial=serial, capture=False)
+                        
+                    time.sleep(8)
+                    
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"⏭️ Next Track", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "87"], serial=serial)
+                    time.sleep(5)
+                    
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"⏮️ Previous Track", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "88"], serial=serial)
+                    time.sleep(5)
                     
                     if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"🔊 Max Volume", serial, run_log_file)
-                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "24"], serial=serial)
+                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "24"], serial=serial, capture=False)
                     time.sleep(5)
                     
                     if self.device_stop_event.get(serial, False): break
                     self.ui_log(f"🔈 Min Volume", serial, run_log_file)
-                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "25"], serial=serial)
+                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "25"], serial=serial, capture=False)
                     time.sleep(5)
                     
-                    self.ui_log(f"⏹️ Stopping playback...", serial, run_log_file)
-                    self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"⏸️ Pause", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "127"], serial=serial)
+                    time.sleep(5)
+                    
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"⏩ Change Progress (Fast Forward)", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "90"], serial=serial)
+                    time.sleep(5)
+                    
+                    self.ui_log(f"⏹️ Exiting Music Player", serial, run_log_file)
+                    self.run_adb(["shell", "input", "keyevent", "127"], serial=serial) # PAUSE
+                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial) # HOME
                     time.sleep(2)
                     completed = i
 
@@ -2017,16 +1584,45 @@ class ADBStressGUI:
                 self.run_adb(["push", kw["audio_local_path"], kw["audio_remote_path"]], serial=serial)
                 time.sleep(2)
                 
+                self.run_adb(["shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", f"\"file://{kw['audio_remote_path']}\""], serial=serial)
+                time.sleep(2)
+
                 for i in range(1, target_val + 1):
                     if self.device_stop_event.get(serial, False): break
-                    self.ui_log(f"--- Cycle {i}/{target_val} : Start Background Music via Native Engine ---", serial, run_log_file)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Start Background Music via Smart Intent ---", serial, run_log_file)
                     
-                    self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
-                    self.run_adb(["shell", f"stagefright -a -o {kw['audio_remote_path']} &"], serial=serial, capture=False)
+                    self.run_adb(["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", f"\"file://{kw['audio_remote_path']}\"", "-t", "audio/*"], serial=serial)
+                    time.sleep(3)
+                    
+                    self.run_adb(["shell", "input", "keyevent", "22"], serial=serial, capture=False)
+                    self.run_adb(["shell", "input", "keyevent", "66"], serial=serial, capture=False)
+                    time.sleep(1)
+                    self.run_adb(["shell", "input", "keyevent", "22"], serial=serial, capture=False)
+                    self.run_adb(["shell", "input", "keyevent", "66"], serial=serial, capture=False)
                     time.sleep(2)
                     
+                    for _ in range(15): self.run_adb(["shell", "input", "keyevent", "24"], serial=serial, capture=False)
+                    
+                    self.run_adb(["shell", "input", "keyevent", "126"], serial=serial)
+                    try:
+                        wm_size = self.run_adb(["shell", "wm", "size"], serial=serial)
+                        if "Physical size:" in wm_size:
+                            dims = wm_size.split(":")[1].strip().split("x")
+                            cx = int(dims[0]) // 2
+                            cy = int(dims[1]) // 2
+                            self.run_adb(["shell", "input", "tap", str(cx), str(cy)], serial=serial, capture=False)
+                    except:
+                        self.run_adb(["shell", "input", "tap", "500", "1000"], serial=serial, capture=False)
+                    time.sleep(4)
+                    
+                    self.run_adb(["shell", "input", "keyevent", "3"], serial=serial) # Back to Home
+                    
                     self.ui_log(f"🔒 Locking Screen for 2 minutes...", serial, run_log_file)
-                    self.run_adb(["shell", "input", "keyevent", "223"], serial=serial)
+                    self.run_adb(["shell", "input", "keyevent", "223"], serial=serial) # Screen Off
+                    time.sleep(2)
+                    
+                    # 🌟 v4.1.0: 確保 AudioPreview 不會因為螢幕關閉而暫停
+                    self.run_adb(["shell", "input", "keyevent", "126"], serial=serial, capture=False) 
                     
                     for _ in range(120):
                         if self.device_stop_event.get(serial, False): break
@@ -2037,8 +1633,9 @@ class ADBStressGUI:
                     self.run_adb(["shell", "input", "keyevent", "224"], serial=serial)
                     time.sleep(1)
                     self.run_adb(["shell", "input", "keyevent", "82"], serial=serial)
+                    time.sleep(2)
                     
-                    self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
+                    self.run_adb(["shell", "input", "keyevent", "127"], serial=serial)
                     completed = i
 
             elif test_type == "Camera - Front/Rear":
@@ -2223,6 +1820,358 @@ class ADBStressGUI:
                     time.sleep(4)
                     completed = i
 
+            elif test_type in ["Reboot & Shutdown Stress", "[APM] System Restart & Shutdown Stress"]:
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Issuing Reboot Command ---", serial, run_log_file)
+                    
+                    self.run_adb(["reboot"], serial=serial)
+                    
+                    self.ui_log("⏳ Waiting for device to disconnect...", serial, run_log_file)
+                    offline_wait_start = time.time()
+                    is_offline = False
+                    while time.time() - offline_wait_start < 120:
+                        if self.device_stop_event.get(serial, False): break
+                        ping = self.run_adb(["shell", "echo", "ping"], serial=serial, timeout=3)
+                        if "ping" not in ping:
+                            is_offline = True
+                            break
+                        time.sleep(2)
+                        
+                    if not is_offline and not self.device_stop_event.get(serial, False):
+                        raise Exception(f"Cycle {i} Error: Device refused to reboot (Hang up detected).")
+
+                    self.ui_log("🔌 Device offline. Waiting for boot & reconnect (Timeout 15 mins)...", serial, run_log_file)
+                    time.sleep(15)
+                    
+                    wait_start = time.time()
+                    device_online = False
+                    
+                    while time.time() - wait_start < 900:
+                        if self.device_stop_event.get(serial, False): break
+                        
+                        if ":" in serial:
+                            try:
+                                subprocess.run(["adb", "disconnect", serial], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **get_cflags())
+                                subprocess.run(["adb", "connect", serial], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, **get_cflags())
+                            except:
+                                pass 
+                        
+                        sys_boot = self.run_adb(["shell", "getprop", "sys.boot_completed"], serial=serial)
+                        anim_state = self.run_adb(["shell", "getprop", "init.svc.bootanim"], serial=serial)
+                        
+                        if "1" in sys_boot and "stopped" in anim_state:
+                            win_check = self.run_adb(["shell", "dumpsys", "window", "displays"], serial=serial)
+                            if "DisplayContents" in win_check or "Display" in win_check:
+                                device_online = True
+                                break
+                            
+                        time.sleep(5)
+                        
+                    if self.device_stop_event.get(serial, False): break
+                    
+                    if not device_online:
+                        check_conn = self.run_adb(["shell", "echo", "ping"], serial=serial)
+                        if "ping" in check_conn:
+                            raise Exception(f"Cycle {i} Error: Device is stuck in BOOTLOOP or Boot Anim! (ADB connected but UI failed)")
+                        else:
+                            raise Exception(f"Cycle {i} Error: Device failed to connect within 15 mins. (Shutdown or Hang up)")
+                        
+                    self.ui_log(f"✅ Device boot completed and UI ready. Holding for {reboot_up} sec...", serial, run_log_file)
+                    
+                    for remain in range(reboot_up, 0, -1):
+                        if self.device_stop_event.get(serial, False): break
+                        if remain % 5 == 0 or remain <= 5:
+                            self.ui_log(f"   ... Waiting {remain} sec", serial, run_log_file)
+                        time.sleep(1)
+                        
+                    if self.device_stop_event.get(serial, False): break
+                    
+                    if do_shutdown:
+                        self.ui_log(f"--- Cycle {i}/{target_val} : Issuing Shutdown Command (reboot -p) ---", serial, run_log_file)
+                        self.run_adb(["shell", "reboot", "-p"], serial=serial)
+                        
+                        self.ui_log(f"⏳ Device shutting down. Holding for {reboot_down} sec before next reboot...", serial, run_log_file)
+                        for remain in range(reboot_down, 0, -1):
+                            if self.device_stop_event.get(serial, False): break
+                            if remain % 5 == 0 or remain <= 5:
+                                self.ui_log(f"   ... {remain} sec remaining until next cycle", serial, run_log_file)
+                            time.sleep(1)
+                    else:
+                        self.ui_log(f"⏳ Skipping Shutdown phase. Waiting {reboot_down} sec interval before next Reboot...", serial, run_log_file)
+                        for remain in range(reboot_down, 0, -1):
+                            if self.device_stop_event.get(serial, False): break
+                            if remain % 5 == 0 or remain <= 5:
+                                self.ui_log(f"   ... {remain} sec remaining until next Reboot", serial, run_log_file)
+                            time.sleep(1)
+                        
+                    completed = i
+
+            elif test_type == "Storage Fake OOM Fill (%)":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Storage OOM Fill (Target: {oom_pct}%) ---", serial, run_log_file)
+                    
+                    self.run_adb(["shell", "rm", "-f", "/data/local/tmp/oom_fill*"], serial=serial)
+                    
+                    total_mb, free_mb = self._get_storage_info(serial)
+                    if total_mb <= 0:
+                        raise Exception(f"Cycle {i} Error: Cannot retrieve storage info.")
+                        
+                    current_used_mb = total_mb - free_mb
+                    target_used_mb = total_mb * (oom_pct / 100.0)
+                    mb_to_fill = int(target_used_mb - current_used_mb)
+                    
+                    if mb_to_fill <= 0:
+                        self.ui_log(f"⚠️ Storage already at {current_used_mb/total_mb*100:.1f}%. Skipping filling step.", serial, run_log_file)
+                    else:
+                        self.ui_log(f"⏳ Dynamic Calc: Total {total_mb:.1f}MB, Free {free_mb:.1f}MB. Filling {mb_to_fill}MB to reach {oom_pct}%...", serial, run_log_file)
+                        start_time = time.time()
+                        
+                        chunk_size = 200
+                        chunks = mb_to_fill // chunk_size
+                        remainder = mb_to_fill % chunk_size
+                        
+                        self.ui_log(f"⏳ Generating payload in {chunk_size}MB chunks to prevent system RAM overflow...", serial, run_log_file)
+
+                        for c in range(int(chunks)):
+                            if self.device_stop_event.get(serial, False): break
+                            cmd_dd = ["adb", "-s", serial, "shell", f"dd if=/dev/zero bs=1048576 count={chunk_size} >> /data/local/tmp/oom_fill.tmp"]
+                            subprocess.run(cmd_dd, capture_output=True, **get_cflags())
+                            cur_mb = (c + 1) * chunk_size
+                            pct = (cur_mb / mb_to_fill) * 100
+                            self.ui_log(f"   ... Filling progress: {cur_mb} MB / {mb_to_fill} MB ({pct:.1f}%)", serial, run_log_file)
+                            time.sleep(0.01)
+
+                        if remainder > 0 and not self.device_stop_event.get(serial, False):
+                            cmd_dd = ["adb", "-s", serial, "shell", f"dd if=/dev/zero bs=1048576 count={int(remainder)} >> /data/local/tmp/oom_fill.tmp"]
+                            subprocess.run(cmd_dd, capture_output=True, **get_cflags())
+                            self.ui_log(f"   ... Filling progress: {mb_to_fill} MB / {mb_to_fill} MB (100.0%)", serial, run_log_file)
+                            time.sleep(0.01)
+                        
+                        if self.device_stop_event.get(serial, False): break
+                        
+                        elapsed = time.time() - start_time
+                        self.ui_log(f"✅ Filled approx. {mb_to_fill} MB in {elapsed:.1f}s", serial, run_log_file)
+                    
+                    hold_seconds = int(oom_mins * 60)
+                    self.ui_log(f"⏳ Holding OOM state for {oom_mins} minutes...", serial, run_log_file)
+                    
+                    oom_monkey_proc = None
+                    if kw["pkgs_str"].strip():
+                        self.ui_log(f"🚀 [OOM-App-Test] Launching Monkey on '{kw['pkgs_str']}' under extreme storage pressure!", serial, run_log_file)
+                        cmd = ["adb", "-s", serial, "shell", "monkey"]
+                        for p in [x.strip() for x in kw["pkgs_str"].split(",") if x.strip()]: 
+                            cmd.extend(["-p", p])
+                        cmd.extend(["--throttle", str(kw["throttle_val"])])
+                        
+                        if kw.get("ignore_crash_val", True):
+                            cmd.extend(["--ignore-crashes", "--ignore-security-exceptions"])
+                        if kw.get("ignore_anr_val", True):
+                            cmd.extend(["--ignore-timeouts"])
+                            
+                        cmd.extend(["-v", "-v", "-v", "999999999"])
+                        
+                        if kw.get("system_apps_list"):
+                            blacklist_path = "/data/local/tmp/sys_blacklist.txt"
+                            local_bl = os.path.join(LOG_DIR, f"blacklist_{safe_serial}.txt")
+                            try:
+                                with open(local_bl, "w", encoding="utf-8") as f:
+                                    f.write("\n".join(kw["system_apps_list"]))
+                                self.run_adb(["push", local_bl, blacklist_path], serial=serial)
+                                cmd.extend(["--pkg-blacklist-file", blacklist_path])
+                                self.ui_log(f"🛡️ Applied {len(kw['system_apps_list'])} system apps to OOM Monkey blacklist.", serial, run_log_file)
+                            except Exception as e:
+                                self.ui_log(f"⚠️ Failed to apply blacklist: {e}", serial, run_log_file)
+
+                        cmd_str = " ".join(cmd[4:])
+                        self.ui_log(f"🚀 [OOM-Monkey CMD] monkey {cmd_str}", serial, run_log_file)
+                        
+                        oom_monkey_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', **get_cflags())
+                        self.monkey_procs[serial] = oom_monkey_proc
+                        
+                        def log_oom_monkey_output(p, s, log_f):
+                            try:
+                                for line in p.stdout:
+                                    if self.device_stop_event.get(s, False): break
+                                    line_str = line.strip()
+                                    if "CRASH" in line_str or "ANR" in line_str or "Exception" in line_str:
+                                        self.ui_log("🔥 [OOM-Monkey-CRASH] " + line_str, s, log_f)
+                                    else:
+                                        with open(log_f, "a", encoding="utf-8") as f:
+                                            f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [{s}] [OOM-Monkey] {line_str}\n")
+                            except: pass
+                        
+                        threading.Thread(target=log_oom_monkey_output, args=(oom_monkey_proc, serial, run_log_file), daemon=True).start()
+
+                    for _ in range(hold_seconds):
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(1)
+                        
+                    if oom_monkey_proc:
+                        try: oom_monkey_proc.terminate()
+                        except: pass
+                        self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=serial, capture=False)
+                        self.ui_log(f"⏹️ [OOM-App-Test] Monkey test finished.", serial, run_log_file)
+                    
+                    if self.device_stop_event.get(serial, False): break
+                    
+                    self.ui_log(f"🧹 Cycle {i} finished. Cleaning up OOM payload...", serial, run_log_file)
+                    self.run_adb(["shell", "rm", "-f", "/data/local/tmp/oom_fill*"], serial=serial)
+                    completed = i
+
+            elif "Monkey" in test_type:
+                cmd = ["adb", "-s", serial, "shell", "monkey"]
+                if "Specific App" in test_type:
+                    for p in [x.strip() for x in kw["pkgs_str"].split(",") if x.strip()]: 
+                        cmd.extend(["-p", p])
+                cmd.extend(["--throttle", str(kw["throttle_val"])])
+                
+                if kw.get("ignore_crash_val", True):
+                    cmd.extend(["--ignore-crashes", "--ignore-security-exceptions"])
+                if kw.get("ignore_anr_val", True):
+                    cmd.extend(["--ignore-timeouts"])
+                
+                cmd.extend(["-v", "-v", "-v", "999999999"])
+                
+                if kw.get("system_apps_list"):
+                    blacklist_path = "/data/local/tmp/sys_blacklist.txt"
+                    local_bl = os.path.join(LOG_DIR, f"blacklist_{safe_serial}.txt")
+                    try:
+                        with open(local_bl, "w", encoding="utf-8") as f:
+                            f.write("\n".join(kw["system_apps_list"]))
+                        self.run_adb(["push", local_bl, blacklist_path], serial=serial)
+                        cmd.extend(["--pkg-blacklist-file", blacklist_path])
+                        self.ui_log(f"🛡️ Applied {len(kw['system_apps_list'])} system apps to Monkey blacklist.", serial, run_log_file)
+                    except Exception as e:
+                        self.ui_log(f"⚠️ Failed to apply blacklist: {e}", serial, run_log_file)
+
+                cmd_str = " ".join(cmd[4:])
+                self.ui_log(f"🚀 [Monkey CMD] monkey {cmd_str}", serial, run_log_file)
+                
+                self.ui_log(f"🚀 Launching Monkey for {target_val} minutes...", serial, run_log_file)
+                m_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', **get_cflags())
+                self.monkey_procs[serial] = m_proc
+                
+                def log_monkey_output(p, s, log_f):
+                    try:
+                        for line in p.stdout:
+                            if self.device_stop_event.get(s, False): break
+                            self.ui_log("Monkey: " + line.strip(), s, log_f)
+                    except: pass
+                
+                threading.Thread(target=log_monkey_output, args=(m_proc, serial, run_log_file), daemon=True).start()
+                
+                start_time = time.time()
+                target_sec = target_val * 60
+                
+                while m_proc.poll() is None:
+                    if self.device_stop_event.get(serial, False) or time.time() - start_time >= target_sec: break
+                    time.sleep(1)
+                
+                try: m_proc.terminate()
+                except: pass
+                self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=serial, capture=False)
+                
+                actual_elapsed_mins = int((time.time() - start_time) / 60)
+                completed = target_val if (time.time() - start_time) >= target_sec else actual_elapsed_mins
+
+            elif test_type == "CPU Thermal Throttling (Mins)":
+                self.ui_log(f"🔥 Spawning heavy processes...", serial, run_log_file)
+                for _ in range(4):
+                    cmd_cpu = ["adb", "-s", serial, "shell", "cat /dev/urandom | md5sum"]
+                    p = subprocess.Popen(cmd_cpu, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **get_cflags())
+                    self.cpu_procs[serial].append(p)
+                
+                for m in range(target_val):
+                    for s in range(60): 
+                        if self.device_stop_event.get(serial, False): break
+                        time.sleep(1)
+                    if self.device_stop_event.get(serial, False): break
+                    
+                    temp_raw = self.run_adb(["shell", "cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null"], serial=serial)
+                    temps = []
+                    for line in temp_raw.splitlines():
+                        line = line.strip()
+                        if line.isdigit() or (line.startswith('-') and line[1:].isdigit()):
+                            try:
+                                t = float(line)
+                                if t > 1000: t /= 1000.0
+                                if 10 < t < 150: 
+                                    temps.append(t)
+                            except: pass
+                            
+                    if temps:
+                        max_t = max(temps)
+                        self.ui_log(f"--- {m+1}/{target_val} Mins. CPU/SoC Max Temp: {max_t:.1f}°C ---", serial, run_log_file)
+                    else:
+                        dumpsys_out = self.run_adb(["shell", "dumpsys thermalservice | grep -i 'mValue=' | head -n 1"], serial=serial)
+                        if "mValue=" in dumpsys_out:
+                            try:
+                                val = dumpsys_out.split("mValue=")[1].split()[0]
+                                self.ui_log(f"--- {m+1}/{target_val} Mins. ThermalService Temp: {val}°C ---", serial, run_log_file)
+                            except:
+                                self.ui_log(f"--- {m+1}/{target_val} Mins. CPU Temp: [Permission Denied or 0] ---", serial, run_log_file)
+                        else:
+                            self.ui_log(f"--- {m+1}/{target_val} Mins. CPU Temp: [Permission Denied or 0] ---", serial, run_log_file)
+                            
+                    completed = m + 1
+                    
+            elif test_type == "App Cold-Start & Kill":
+                pkgs = [x.strip() for x in kw["pkgs_str"].split(",") if x.strip()]
+                if not pkgs: raise Exception("Target Package is required!")
+                pkg = pkgs[0] 
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Force-Stopping App [{pkg}] ---", serial, run_log_file)
+                    self.run_adb(["shell", "am", "force-stop", pkg], serial=serial)
+                    time.sleep(2)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Cold-Starting App [{pkg}] ---", serial, run_log_file)
+                    self.run_adb(["shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1"], serial=serial)
+                    time.sleep(5) 
+                    completed = i
+
+            elif test_type == "App Clear Data & Restart":
+                pkgs = [x.strip() for x in kw["pkgs_str"].split(",") if x.strip()]
+                if not pkgs: raise Exception("Target Package is required!")
+                pkg = pkgs[0] 
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Wiping Data for [{pkg}] ---", serial, run_log_file)
+                    self.run_adb(["shell", "pm", "clear", pkg], serial=serial)
+                    time.sleep(2)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Starting App [{pkg}] ---", serial, run_log_file)
+                    self.run_adb(["shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1"], serial=serial)
+                    time.sleep(5) 
+                    completed = i
+
+            elif test_type == "Battery Spoofing & Power State":
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Spoofing 5% Battery ---", serial, run_log_file)
+                    self.run_adb(["shell", "dumpsys", "battery", "unplug"], serial=serial)
+                    self.run_adb(["shell", "dumpsys", "battery", "set", "level", "5"], serial=serial)
+                    time.sleep(5)
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Resetting Battery State ---", serial, run_log_file)
+                    self.run_adb(["shell", "dumpsys", "battery", "reset"], serial=serial)
+                    time.sleep(5)
+                    completed = i
+
+            elif test_type == "Gallery UI Tap":
+                self.run_adb(["shell", "input", "keyevent", "224"], serial=serial) 
+                for i in range(1, target_val + 1):
+                    if self.device_stop_event.get(serial, False): break
+                    self.ui_log(f"--- Cycle {i}/{target_val} : Launching Gallery ---", serial, run_log_file)
+                    self.run_adb(["shell", "monkey", "-p", "com.google.android.apps.photos", "-c", "android.intent.category.LAUNCHER", "1"], serial=serial)
+                    time.sleep(4)
+                    for action in [("tap", "300 800", 2), ("tap", "500 500", 2), ("tap", "300 2000", 3), ("tap", "500 2000", 2)]:
+                        if self.device_stop_event.get(serial, False): break
+                        self.run_adb(["shell", "input", action[0]] + action[1].split(), serial=serial)
+                        time.sleep(action[2])
+                    self.run_adb(["shell", "input", "keyevent", "4"], serial=serial)
+                    time.sleep(2)
+                    completed = i
+
             if completed == 0 and not self.device_stop_event.get(serial, False):
                 raise Exception("Test completed 0 cycles/mins. Logical execution failed.")
             else:
@@ -2283,8 +2232,6 @@ class ADBStressGUI:
             self.run_adb(["shell", "killall", "cat"], serial=serial, capture=False)
             self.run_adb(["shell", "killall", "md5sum"], serial=serial, capture=False)
             self.run_adb(["shell", "dumpsys", "battery", "reset"], serial=serial, capture=False)
-            self.run_adb(["shell", "killall", "stagefright"], serial=serial, capture=False)
-            self.run_adb(["shell", "killall", "tinycap"], serial=serial, capture=False)
             
             self.run_adb(["shell", "am", "force-stop", "com.tpm.osd"], serial=serial, capture=False)
 
@@ -2335,14 +2282,16 @@ class ADBStressGUI:
                     
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "dd"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "com.android.commands.monkey"], serial=s, capture=False), daemon=True).start()
-                threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "stagefright"], serial=s, capture=False), daemon=True).start()
-                threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "tinycap"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "curl"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "killall", "wget"], serial=s, capture=False), daemon=True).start()
                 
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "am", "force-stop", "com.android.chrome"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "am", "force-stop", "com.android.browser"], serial=s, capture=False), daemon=True).start()
                 threading.Thread(target=lambda s=serial: self.run_adb(["shell", "am", "force-stop", "org.mozilla.firefox"], serial=s, capture=False), daemon=True).start()
+                
+                # 🌟 v4.1.0: 停止播放時，送出暫停指令與停止指令
+                threading.Thread(target=lambda s=serial: self.run_adb(["shell", "input", "keyevent", "127"], serial=s, capture=False), daemon=True).start()
+                threading.Thread(target=lambda s=serial: self.run_adb(["shell", "input", "keyevent", "86"], serial=s, capture=False), daemon=True).start()
                 
                 stopped_count += 1
                 

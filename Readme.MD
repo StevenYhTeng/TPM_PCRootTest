@@ -1,4 +1,46 @@
 🚀 Release Notes (版本更新日誌)
+🚀 Release Notes: ADB Stress Test Console (v4.0.18 ➔ v4.1.0)
+🇹🇼 中文版 (Chinese Version)
+🌟 新功能與核心升級 (New Features & Core Upgrades)
+🧠 音訊智慧點擊與防護機制 (Smart Audio Intent & Automation)
+
+泛用型安全呼叫 (Generic Intent)：全面重構音訊播放指令。捨棄強制綁定 App 套件名稱的做法，改用 Android 合法的泛用廣播 (Generic VIEW Intent)。完美解決在 Android 11+ 設備上因存取 file:// 路徑而觸發 FileUriExposedException 導致播放器瞬間閃退的致命問題。
+
+自動突破選擇視窗 (Chooser Bypass)：加入全新的 UI 盲操作邏輯。當系統跳出「請選擇開啟應用程式 (Open with...)」視窗時，腳本會自動發送 Tab 與 Enter 的底層鍵盤指令，全自動選取預設播放器，實現零人工干預。
+
+🐛 修正問題與優化 (Bug Fixes & Improvements)
+🎯 螢幕中心盲點擊支援 (Dynamic Center Screen Tap)
+
+修正許多 OEM 原廠預設播放器（如 AudioPreview）在透過指令喚醒後，必須人工點擊畫面中央才會發聲的問題。腳本現在會自動攔截並計算手機的真實螢幕解析度 (wm size)，精準點擊螢幕幾何正中央，強制觸發播放。
+
+🌙 背景續播強制喚醒修復 (Background Playback Force-Wake)
+
+針對 Audio - Background Play & Screen Lock 測試，修正了部分手機在螢幕休眠黑屏瞬間，會被系統省電機制強行暫停音樂的問題。現在腳本會在鎖定螢幕後，額外補發一次實體的媒體播放鍵指令 (KEYCODE_MEDIA_PLAY)，確保音樂在休眠環境下依然持續高壓播放。
+
+🧹 程式碼結構優化 (Code Structure Optimization)
+
+移除前一版遺留的無效強制除錯指令，使整體測試迴圈的異常處理 (Exception Handling) 更加純淨與精準。
+
+🇺🇸 英文版 (English Version)
+🌟 New Features & Core Upgrades
+🧠 Smart Audio Intent & Automation Engine
+
+Generic Secure Intent: Completely refactored the audio playback command. Abandoned hardcoded app component targeting in favor of legitimate Generic VIEW Intents. This perfectly resolves the fatal FileUriExposedException crash on Android 11+ devices caused by accessing file:// URIs under Scoped Storage restrictions.
+
+Auto-Dismiss App Chooser (Chooser Bypass): Implemented a new blind UI automation logic. If the Android system prompts an "Open with..." app chooser dialog, the script now automatically injects low-level Tab (D-Pad Right) and Enter keystrokes to auto-select the default media player, achieving zero-touch automation.
+
+🐛 Bug Fixes & Improvements
+🎯 Dynamic Center Screen Tap for AudioPreview
+
+Fixed an issue where many OEM default media players (like AudioPreview) required manual user interaction to start playing after being launched via intents. The script now dynamically fetches the device's real-time screen resolution (wm size) and performs a precision tap at the exact geometric center to force audio playback.
+
+🌙 Background Playback Force-Wake Fix
+
+Resolved an issue in the Audio - Background Play & Screen Lock test where aggressive OEM battery optimization would pause the music the exact moment the screen turned off. The script now injects an extra hardware KEYCODE_MEDIA_PLAY event immediately after screen lock, guaranteeing continuous high-stress playback in doze mode.
+
+🧹 Code Structure Optimization
+
+Cleaned up invalid residual debugging commands from the previous iteration, resulting in a purer and more accurate Exception Handling flow within the main execution loop.
 🚀 Release Notes: ADB Stress Test Console (v4.0.4 ➔ v4.0.18)
 🇹🇼 中文版 (Chinese Version)
 🌟 新功能 (New Features)
