@@ -1,5 +1,96 @@
 🚀 Release Notes (版本更新日誌)
-🚀 Release Notes: ADB Stress Test Console (v4.0.18 ➔ v4.1.0)
+🚀 ADB Stress Test Console Release Notes (v4.1.0 ➔ v4.2.5)
+🇹🇼 中文版 (Chinese Version)
+🌟 核心新功能與模組 (New Core Features & Modules)
+🎬 全新模組：本機影片循環壓力測試 (Local Video Playback Stress)
+
+新增對本機影片檔 (.mp4, .mkv 等) 的高壓循環播放測試。
+
+支援「多檔案批量派送」，腳本會自動將影片推送到設備端 /sdcard/Movies/stress_vids/。
+
+支援「循環輪播機制」與「自訂每圈播放時長 (預設 300 秒)」，時間到達自動擊殺並開啟下一支影片。
+
+⏱️ 自訂系統重啟超時 (Custom Reboot Timeout)
+
+在 [APM] System Restart & Shutdown 測試中，新增使用者自訂 Timeout 分鐘數的 UI 欄位。打破過去寫死 15 分鐘的限制，完美適應開機較慢的低階硬體或龐大系統。
+
+🧠 智慧化與防呆升級 (Smart Automation & Failsafes)
+🛡️ 終極視窗突破器 (Chooser Bypass & Resolver Blacklist)
+
+針對 Android 12+ 必定彈出的「開啟方式 (Open with...)」選單，加入嚴格的 ResolverActivity 與 com.android.internal 系統黑名單過濾，防止腳本誤認播放器。
+
+升級 D-Pad 萬用盲打連擊 (下、Enter、右、Enter、Tab、Enter)，無論 OEM 廠商的 UI 選單是直向或橫向，皆能全自動點擊「永遠使用 (Always)」並強制播放。
+
+🌐 Chrome 歡迎畫面與下載自動確認 (Chrome FRE & Download Auto-Click)
+
+解決全新系統 (Factory Reset) 初次開啟 Chrome 時卡在「歡迎使用」或「確認下載」的痛點。
+
+若偵測到下載未啟動，腳本會於背景持續送出 TAB + ENTER，完全取代人工介入，自動點掉所有阻擋視窗。
+
+🔥 螢幕防休眠與冷啟動鎖定 (Keep-Awake & Cold-Start Lock)
+
+Video Streaming: 測試前強制修改系統 screen_off_timeout 為 24 小時，並在結束時「安全還原」為使用者原本設定，徹底解決影片播到一半系統自我休眠的 Bug。
+
+Hot-Start Fix: 每一圈播放 YouTube 或本機影片前，強制發送 am force-stop 擊殺播放器，確保新網址與意圖 (Intent) 能以 100% 乾淨的「冷啟動」狀態被正確解析。
+
+🐛 重大錯誤修正與架構優化 (Critical Bug Fixes & Architecture)
+🎵 音訊播放邏輯淨化 (Audio Logic Refine)
+
+全面改用泛用安全廣播 (Generic Intent)，避開 Android 11 分區儲存 (Scoped Storage) 導致的 FileUriExposedException 閃退問題。
+
+移除會導致部分 OEM 陽春播放器錯亂的「上一首/下一首」指令，專注於快轉、倒轉、最大/最小音量的高壓切換。
+
+🧱 程式碼結構極致壓縮 (Code Loop Compression)
+
+為了突破系統生成的極限長度，將大量重複的 adb shell input keyevent 重構為高效的 for 迴圈陣列。
+
+成功將程式碼瘦身超過 300 行，不僅執行效率更高，也確保所有 34 個測試模組（包含 MDM、Storage 1GB、本地複製等）100% 完整無遺漏。
+
+🇺🇸 英文版 (English Version)
+🌟 New Core Features & Modules
+🎬 New Module: Local Video Playback Stress
+
+Introduced high-intensity cyclic playback testing for local video files (e.g., .mp4, .mkv).
+
+Supports "Multi-file Batch Push", automatically transferring selected videos to the device's /sdcard/Movies/stress_vids/ directory.
+
+Features cyclic rotation and customizable playback duration per cycle (default is 300 seconds). The script automatically kills the player and proceeds to the next video when the timer expires.
+
+⏱️ Custom Reboot Timeout
+
+Added a user-defined Timeout (in minutes) UI field for the [APM] System Restart & Shutdown Stress test. This replaces the hardcoded 15-minute limit, perfectly accommodating low-end hardware or heavy systems with longer boot times.
+
+🧠 Smart Automation & Failsafes
+🛡️ Ultimate Chooser Bypass & Resolver Blacklist
+
+Addressed the mandatory "Open with..." dialog on Android 12+ by strictly filtering out ResolverActivity and com.android.internal in the background query, preventing the script from misidentifying the UI menu as a media player.
+
+Upgraded the D-Pad blind-tap sequence to a universal combo (Down, Enter, Right, Enter, Tab, Enter). This guarantees auto-selection and bypasses "Always use" prompts, regardless of whether the OEM's UI is vertically or horizontally aligned.
+
+🌐 Chrome FRE & Download Auto-Click
+
+Resolved the issue where fresh systems (Factory Reset) stall at the Chrome "First Run Experience (FRE)" or "Confirm Download" security prompts.
+
+If a pending download is detected, the script now continuously injects TAB + ENTER keystrokes in the background to automatically dismiss blocking windows without manual intervention.
+
+🔥 Keep-Awake Lock & Cold-Start Enforcement
+
+Video Streaming: Temporarily overwrites the system's screen_off_timeout to 24 hours during testing, completely eliminating bugs where the system falls asleep mid-stream. Original user settings are safely restored in the finally block.
+
+Hot-Start Fix: Sends a mandatory am force-stop to kill YouTube and local video players before every cycle. This ensures that new URLs and Intents are perfectly parsed via a clean "Cold Start", avoiding stuck views.
+
+🐛 Critical Bug Fixes & Architecture Optimizations
+🎵 Audio Playback Logic Refinement
+
+Migrated to Generic VIEW Intents, perfectly bypassing the FileUriExposedException crashes caused by Android 11 Scoped Storage restrictions.
+
+Removed "Next/Previous Track" inputs which caused unexpected behavior on basic OEM media players, focusing entirely on high-stress Fast-Forward, Rewind, and Max/Min volume toggles.
+
+🧱 Ultimate Code Compression & Stability
+
+Refactored and compressed heavily repeated adb shell input keyevent commands into highly efficient for loops.
+
+Successfully reduced the script footprint by over 300 lines while improving execution speed and permanently guaranteeing that all 34 core test modules (including MDM, 1GB Storage I/O, Local Copy, etc.) are 100% intact and free from truncation.🚀 Release Notes: ADB Stress Test Console (v4.0.18 ➔ v4.1.0)
 🇹🇼 中文版 (Chinese Version)
 🌟 新功能與核心升級 (New Features & Core Upgrades)
 🧠 音訊智慧點擊與防護機制 (Smart Audio Intent & Automation)
