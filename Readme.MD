@@ -1,4 +1,53 @@
 🚀 Release Notes (版本更新日誌)
+🚀 Release Notes: v4.2.5 -> v4.3.1
+🇬🇧 English Version
+✨ New Features & Enhancements
+Smart Camera Engine (v4.3.0):
+Introduced a dynamic center-point calculation and foreground app detection for camera lens blind-switching. This calculates the exact center of the screen to perform swipe gestures, preventing accidental triggers of the Android Notification dropdown. It also implements a fallback monkey command to forcefully bring the camera app to the foreground.
+
+Multi-Audio File Support (v4.3.1):
+Upgraded the Audio Playback tests to support selecting multiple local audio files simultaneously. The script now pushes all selected media to the device and seamlessly cycles through them during the test loops.
+
+Optimized Batch APK Installation Pipeline (v4.3.1):
+Significantly improved the stability of high-cycle APK installation tests. The tool now pushes the entire APK folder to the device's local temp storage (/data/local/tmp/stress_apks) once before the test starts. Subsequent test cycles install the APKs directly from the device's internal storage, completely eliminating ADB transport overloads and file corruption.
+
+Strict Monkey Test Validation (v4.3.1):
+Enhanced the PASS/FAIL criteria for Monkey tests. If the Monkey process crashes, is killed, or terminates prematurely (falling short of the target time by more than a 15-second buffer), the system will now correctly mark the cycle as FAIL and log the exception.
+
+🐛 Bug Fixes
+Fixed Media Playback Blockers (v4.3.1):
+Resolved a critical issue where Video and Audio playback tests would get permanently stuck on the Google Assistant screen ("Just a moment...") or the App Chooser dialog. Implemented a robust key-event combo (BACK, ENTER, PLAY) to automatically bypass popups and force media playback.
+
+Fixed Notification Bar Accidental Pull-down (v4.2.9 / v4.3.0):
+Fixed an issue in the "Camera Front/Rear" test where the simulated swipe-down gesture originated too close to the top of the screen, causing the Notification Shade to pull down and block the camera UI.
+
+Enforced Camera Cold Starts (v4.2.8):
+Addressed an issue where camera facing intent parameters (CAMERA_FACING 0/1) were ignored by the system during hot starts. The tool now aggressively force-stops camera packages between lens toggles to guarantee a successful cold start and parameter injection.
+
+🇹🇼 繁體中文版
+✨ 新功能與架構優化
+智慧相機引擎 (v4.3.0)：
+導入「動態中心點計算」與「前景應用程式偵測」機制。在執行鏡頭切換的手勢滑動時，系統會精準計算螢幕正中心作為起點，徹底消滅誤觸並拉下通知列 (Notification Bar) 的問題。同時加入 monkey 暴力喚醒機制，確保相機必定被推至最上層顯示。
+
+支援多音訊檔輪播 (v4.3.1)：
+音訊播放測試（Audio Playback）現已支援「多選」本地端音樂檔案（如 MP3、WAV）。腳本會自動將所有選擇的檔案推播至設備端，並於壓力測試的循環中依序輪播。
+
+最佳化批次 APK 安裝管線 (v4.3.1)：
+大幅提升高圈數 APK 壓力測試的穩定性。將邏輯改為在測試開始前「一次性」將整個 APK 資料夾推播至設備端暫存區 (/data/local/tmp/stress_apks)。後續的安裝迴圈皆改為直接從設備內部執行，徹底解決因 ADB 頻繁傳輸所導致的頻寬過載與檔案毀損問題。
+
+Monkey 測試嚴格驗證機制 (v4.3.1)：
+強化 Monkey 測試的 PASS/FAIL 判定標準。現在系統會嚴格比對執行時間，若 Monkey 行程發生異常崩潰、被系統擊殺或提前終止（少於目標時間達 15 秒以上），系統將精準判定為 FAIL 並記錄錯誤，不再發生異常中斷卻誤判為 PASS 的狀況。
+
+🐛 問題修復
+修復影音播放遭彈窗阻擋問題 (v4.3.1)：
+解決 Video 與 Audio 測試啟動時，畫面經常卡在 Google 語音助理（「Just a moment...」）或應用程式選擇器 (Chooser) 的問題。新增了強制的防禦性實體按鍵組合（返回、確認、播放），以自動消除干擾彈窗並強制開始播放。
+
+修復相機測試誤拉通知列問題 (v4.2.9 / v4.3.0)：
+解決「Camera Front/Rear」測試時，因向下滑動手勢的 Y 軸起點過高，導致系統觸發下拉狀態列並蓋住相機畫面，進而導致測試卡死的問題。
+
+相機強制冷啟動修復 (v4.2.8)：
+解決部分 USB 相機或 AOSP 系統在熱啟動下不接收 Intent 切換參數 (CAMERA_FACING) 的問題。現在切換鏡頭前，會確保徹底擊殺相機進程 (Force-stop)，保證每一次啟動皆為純淨的「冷啟動」。
+
 🚀 ADB Stress Test Console Release Notes (v4.1.0 ➔ v4.2.5)
 🇹🇼 中文版 (Chinese Version)
 🌟 核心新功能與模組 (New Core Features & Modules)
