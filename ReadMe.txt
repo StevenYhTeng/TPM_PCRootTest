@@ -1,4 +1,82 @@
 🚀 Release Notes (版本更新日誌)
+🚀 Version 4.3.3
+Release Date / 發布日期: 2026-08-10
+
+繁體中文
+[APM] Camera & Media 複合測試套件整合：
+
+將原本分散的相機測項整合至 [APM] Camera & Media Stress 中，每個 Cycle 依序執行：基本相機啟動拍照、前後鏡頭切換與錄影、100 張高速連拍、以及內外儲存空間切換。
+
+相機首啟動提示框自動繞過 (Camera Prompts Bypass)：
+
+新增 dismiss_camera_prompts 機制，並於測試前自動預先授予相機定位權限（ACCESS_FINE_LOCATION），自動跳過「Remember photo locations?」等初次使用提示頁面。
+
+Chrome 與 Setup Wizard 卡死防禦 (Checking Info Bypass)：
+
+新增 dismiss_chrome_prompts 邏輯，並於執行瀏覽器測試前自動關閉 com.google.android.setupwizard，防止新解包系統停留在帳號驗證與歡迎頁面。
+
+影音串流持續播放保底機制 (Streaming Keep-Alive)：
+
+移除會導致影片/音訊暫停的畫面觸控 (input tap) 操作，改為透過發送 KEYCODE_MEDIA_PLAY (126) 實體按鍵。
+
+在 2 小時的燒機測試中新增每 60 秒發送一次播放指令的機制，防止短影片播完後設備陷入永久暫停狀態。
+
+English
+[APM] Camera & Media Combined Suite Integration:
+
+Unified individual camera tests into [APM] Camera & Media Stress. Each cycle sequentially runs Base Capture, Front/Rear Switch & Video, 100-Shot Rapid Capture, and Storage Switching.
+
+Automated Camera Dialog Bypass:
+
+Pre-grants location permissions (ACCESS_FINE_LOCATION) and introduces dismiss_camera_prompts to automatically dismiss initial setup popups like "Remember photo locations?".
+
+Chrome & Setup Wizard Unblocker:
+
+Added dismiss_chrome_prompts and automated force-stopping of com.google.android.setupwizard to prevent browser tasks from getting stuck on "Checking info" or Google account login screens on freshly flashed builds.
+
+Streaming Keep-Alive & Playback Fix:
+
+Removed screen touch taps (input tap) that accidentally paused video/audio, replacing them with discrete KEYCODE_MEDIA_PLAY keyevents.
+
+Implemented a 60-second keep-alive pulse during long streaming tests to prevent short videos from freezing on completion.
+
+🚀 Version 4.3.2
+Release Date / 發布日期: 2026-08-08
+
+繁體中文
+雙控制台與即時進度儀表板 (Dual Console Dashboard)：
+
+右側面板改為上下分割視窗（PanedWindow），上半部顯示全設備即時 Log，下半部專屬顯示當前執行中設備的圈數與詳細進度。
+
+ADB 斷線守門員 (ADB Watchdog Engine)：
+
+新增背景獨立監控執行緒，每 3 秒自動掃描連線。若機台非預期斷線（非 Reboot/Shutdown 流程），自動記錄 Fail 並中斷測試。
+
+智能預期斷線保護 (Expected Disconnect Logic)：
+
+針對 Reboot 與 Shutdown 測項加入白名單機制，允許設備在重啟過程中正常離線，避免 Watchdog 誤判為斷線失敗。
+
+Batch APK 複製進度顯示 (Copy App Progress)：
+
+在「Batch APK Installation Stress」推送檔案階段，Log 面板新增逐一顯示傳輸進度（如 [1/5]）、APK 檔名、檔案大小 (MB) 及單檔耗時時間。
+
+English
+Dual Console Dashboard (PanedWindow Layout):
+
+Redesigned the right panel into a vertical split view showing real-time system-wide logs on top and active device cycle progress at the bottom.
+
+ADB Watchdog Engine:
+
+Added a background thread monitoring ADB status every 3 seconds. Unexpected disconnections will trigger a controlled failure state and halt the test cleanly.
+
+Expected Disconnect Logic:
+
+Implemented smart disconnection flags during Reboot and Shutdown suites to prevent the watchdog from misinterpreting expected offline rebooting as an error.
+
+Batch APK Copy Progress Logging:
+
+Enhanced "Batch APK Installation Stress" to report real-time "Copy App" metrics including item counts ([1/N]), file names, file sizes (MB), and transfer times before triggering silent installation.
+
 🚀 Release Notes: v4.2.5 -> v4.3.1
 🇬🇧 English Version
 ✨ New Features & Enhancements
