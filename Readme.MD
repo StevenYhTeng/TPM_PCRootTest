@@ -1,4 +1,32 @@
-🚀 Release Notes (版本更新日誌)
+📋 Release Notes / 版本更新日誌
+🚀 Version 4.3.4
+Release Date / 發布日期: 2026-08-21
+
+繁體中文 (Traditional Chinese)
+[APM] 系統重啟與關機測試 (Restart & Shutdown) 邏輯修正：
+
+修復了在使用 WiFi ADB (TCP/IP) 進行重啟測試時，因 Android 系統剛開機時網路狀態不穩定，導致 Watchdog 過早介入並誤判為 ADB CONNECTION LOST 進而異常中斷測試的嚴重問題。
+
+Watchdog 斷線保護機制延後 (Watchdog Protection Deferral)：
+
+優化 Watchdog 監控盲區。將「預期斷線保護 (Expected Disconnect)」的解除時機，從「偵測到開機動畫結束」往後延遲至「60 秒開機穩定期完全結束後」。這能確保完整覆蓋設備剛啟動時載入各項系統服務的網路閃斷期。
+
+WiFi ADB 自動重連保底機制 (Auto-Reconnect Fallback Mechanism)：
+
+在開機完成後的 60 秒穩定期內，加入針對無線連線的特化保底設計。若工具偵測到當前設備是透過 WiFi ADB 連線（包含 IP:Port 格式），將會每 10 秒自動於背景執行一次 adb connect。此舉能確保因系統重啟 WiFi 模組而造成的短暫離線，都能在第一時間被瞬間接回。
+
+English
+[APM] System Restart & Shutdown Stress Logic Fix:
+
+Resolved a critical issue where the ADB Watchdog would prematurely trigger a false positive ADB CONNECTION LOST error during the post-boot phase. This fix specifically addresses test interruptions caused by unstable network states immediately after boot on devices connected via WiFi ADB (TCP/IP).
+
+Watchdog Protection Deferral:
+
+Optimized the watchdog monitoring blind spot. Postponed the deactivation of the "Expected Disconnect" protection flag. It now remains fully active throughout the entire 60-second post-boot countdown, rather than turning off immediately upon UI readiness, safely covering the network initialization and service loading period.
+
+WiFi ADB Auto-Reconnect Fallback:
+
+Introduced a specialized background auto-reconnect routine during the 60-second post-boot stabilization period. For devices connected via IP address, the tool will now automatically issue a silent adb connect command every 10 seconds. This ensures instantaneous recovery from typical post-boot WiFi module resets and transient network drops.
 🚀 Version 4.3.3
 Release Date / 發布日期: 2026-08-10
 
