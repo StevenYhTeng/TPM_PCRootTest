@@ -1,87 +1,69 @@
 📋 Release Notes / 版本更新日誌
-📋 Release Notes / 版本更新日誌
+版本更新說明 (v4.3.7 - v4.3.8)
+
+🚀 v4.3.8 更新
+[APM Data I/O] 動態 UI 彈窗偵測： 導入 UI Automator 畫面解析機制，自動判斷是否出現「選擇下載位置」或「危險檔案（仍要下載）」等攔截視窗。
+[APM Data I/O] 精準座標點擊： 捨棄容易誤觸的盲按機制（TAB + ENTER），改為解析 XML 並精準點擊「下載」按鈕的螢幕絕對座標。
+[APM Data I/O] 安全跳過機制： 若環境正常、未觸發任何下載警告彈窗，系統會自動跳過點擊動作，避免干擾測試進度。
+[APM Burn-In] 選項優化： 移除清單中已失效的 Apple CDN 測試網址。
+[APM Data I/O] 穩定性修正： 解決一次觸發多個下載及第二輪測試卡死的問題；每個 Cycle 開始前會強制清除 Chrome 應用程式資料 (pm clear)，確保不出現「是否重新下載」的干擾。
+[Batch APK Install] 防干擾與超時延長： 測試前自動透過指令關閉 Google Play Protect (安全防護) 的背景掃描機制，並將單個 APK 的安裝等待上限延長至 240 秒，解決多檔連續安裝造成的卡死問題。
+
 🚀 Version 4.3.7
 Release Date / 發布日期: 2026-09-01
 [APM] Burn-In (影片串流燒機)
-
 從預設選單中移除已失效的 Apple CDN 24/7 串流測試網址。
-
 修復 YouTube 無法載入與意外退出的問題，改用完整 URL 並強制指定 YouTube 包名啟動，且移除了會導致 App 關閉的 KEYCODE_BACK 盲按邏輯。
-
 解決 Chrome 播放影片時誤觸「設定」選單的問題，改採動態計算螢幕中心點進行雙重點擊，並輔以 KEYCODE_MEDIA_PLAY 確保順利播放。
-
 [APM] Data I/O (瀏覽器下載)
-
 修復 Google CTS Media 會一次觸發多個下載且第二輪必定失敗的問題。現已加入每輪測試前強制清除 Chrome 資料 (pm clear com.android.chrome) 的機制，並優化了自動點擊「危險檔案下載確認框」的邏輯，避免重複觸發。
-
 新增 Chrome First Run Experience (FRE) 完美繞過機制，透過寫入 chrome-command-line 參數直接停用歡迎畫面與預設瀏覽器提示。
-
 實裝「下載停滯偵測（Stall Detection）」，若暫存檔大小連續 15 秒未增加將提早判定 Fail，不再盲目等待 300 秒。
-
 Batch APK Installation (批次 APK 安裝)
-
 修復連續安裝多個 APK（如裝到第 9 個）時的卡死問題，新增自動關閉 Google Play Protect（Package Verifier 安全防護）的指令，以避免背景掃描干擾安裝。
-
 將單個 APK 的安裝逾時限制從 120 秒大幅延長至 240 秒。
-
 修復透過 adb shell pm install 時因權限不足導致安裝失敗的問題，傳輸完成後統一對 /data/local/tmp/stress_apks 目錄執行 chmod -R 777 提權。
+
+🚀 v4.3.8 Updates
+[APM Data I/O] Dynamic UI Prompt Detection: Introduced UI Automator XML parsing to actively detect browser download prompts (e.g., "Choose where to download", "Download anyway").
+[APM Data I/O] Precision Coordinate Tapping: Replaced blind key events (TAB + ENTER) with exact X/Y coordinate extraction and tapping for the "Download" button.
+[APM Data I/O] Safe Interaction Bypass: If no security or path selection dialog appears, the tool safely skips the click action to prevent unintended UI navigation.
+[APM Burn-In] Preset Optimization: Removed the broken Apple CDN URL from the video streaming presets.
+[APM Data I/O] Cycle Reliability Fix: Fixed issues with multiple concurrent downloads and consecutive cycle failures by forcing Chrome data clearance (pm clear) before every cycle, ensuring a clean state without "Download again" prompts.
+[Batch APK Install] Anti-Interference & Timeout Extension: Automatically disables Google Play Protect (Package Verifier) before testing to prevent background scanning from blocking installations, and increased the per-APK installation timeout limit to 240 seconds.
 
 🚀 Version 4.3.7
 Release Date : 2026-09-01
 [APM] Burn-In (Video Streaming)
-
 Removed the deprecated and inaccessible Apple CDN 24/7 stream URL from the testing presets.
-
 Fixed YouTube playback failures by utilizing full URLs, explicitly targeting the com.google.android.youtube package, and removing a destructive KEYCODE_BACK injection that accidentally closed the app.
-
 Fixed an issue in Chrome video playback where the script accidentally opened the player's settings menu. Replaced directional pad navigation with dynamic screen-center tapping combined with KEYCODE_MEDIA_PLAY for reliable playback.
-
 [APM] Data I/O (Browser Download)
-
 Prevented multiple concurrent downloads and second-cycle failures (e.g., Google CTS Media) by clearing Chrome data (pm clear com.android.chrome) before every cycle to guarantee a clean state.
-
 Optimized the "Download Anyway" safety prompt interaction to trigger only once instead of looping.
-
 Improved the Chrome First Run Experience (FRE) bypass by injecting chrome-command-line parameters to natively disable the welcome screen and default browser prompts.
-
 Introduced Stall Detection. The test will now fail early if the downloaded file size does not change for 15 seconds, preventing the system from blindly waiting for the 300-second timeout.
-
 Batch APK Installation Stress
-
 Resolved continuous installation timeouts and freezes (e.g., stalling around the 9th APK) by automatically disabling Google Play Protect (Package Verifier) before testing to prevent background scanning interference.
-
 Extended the per-APK installation timeout from 120 seconds to 240 seconds for larger files.
-
 Fixed a Permission Denied error during shell pm install by enforcing chmod -R 777 on the temporary /data/local/tmp/stress_apks directory before execution.
 
 🚀 Version 4.3.4
 Release Date / 發布日期: 2026-08-21
-
-繁體中文 (Traditional Chinese)
 [APM] 系統重啟與關機測試 (Restart & Shutdown) 邏輯修正：
-
 修復了在使用 WiFi ADB (TCP/IP) 進行重啟測試時，因 Android 系統剛開機時網路狀態不穩定，導致 Watchdog 過早介入並誤判為 ADB CONNECTION LOST 進而異常中斷測試的嚴重問題。
-
 Watchdog 斷線保護機制延後 (Watchdog Protection Deferral)：
-
 優化 Watchdog 監控盲區。將「預期斷線保護 (Expected Disconnect)」的解除時機，從「偵測到開機動畫結束」往後延遲至「60 秒開機穩定期完全結束後」。這能確保完整覆蓋設備剛啟動時載入各項系統服務的網路閃斷期。
-
 WiFi ADB 自動重連保底機制 (Auto-Reconnect Fallback Mechanism)：
-
 在開機完成後的 60 秒穩定期內，加入針對無線連線的特化保底設計。若工具偵測到當前設備是透過 WiFi ADB 連線（包含 IP:Port 格式），將會每 10 秒自動於背景執行一次 adb connect。此舉能確保因系統重啟 WiFi 模組而造成的短暫離線，都能在第一時間被瞬間接回。
 
-English
 [APM] System Restart & Shutdown Stress Logic Fix:
-
 Resolved a critical issue where the ADB Watchdog would prematurely trigger a false positive ADB CONNECTION LOST error during the post-boot phase. This fix specifically addresses test interruptions caused by unstable network states immediately after boot on devices connected via WiFi ADB (TCP/IP).
-
 Watchdog Protection Deferral:
-
 Optimized the watchdog monitoring blind spot. Postponed the deactivation of the "Expected Disconnect" protection flag. It now remains fully active throughout the entire 60-second post-boot countdown, rather than turning off immediately upon UI readiness, safely covering the network initialization and service loading period.
-
 WiFi ADB Auto-Reconnect Fallback:
-
 Introduced a specialized background auto-reconnect routine during the 60-second post-boot stabilization period. For devices connected via IP address, the tool will now automatically issue a silent adb connect command every 10 seconds. This ensures instantaneous recovery from typical post-boot WiFi module resets and transient network drops.
+
 🚀 Version 4.3.3
 Release Date / 發布日期: 2026-08-10
 
