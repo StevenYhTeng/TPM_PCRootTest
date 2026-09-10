@@ -1,9 +1,25 @@
 📋 Release Notes / 版本更新日誌
+
+🚀 v4.4.1 更新
+[MDM Framework Stress] System Server 崩潰自動復原： 在建立 Work Profile（pm create-user）時加入例外捕捉機制。若偵測到 system_server 崩潰（如出現 Can't find service: package、error: closed 或 DeadSystemException），腳本會自動觸發 20 秒的安全冷卻期，等待 Android 系統完成 Soft Reboot 並自動重試，避免長時間壓力測試直接中斷失敗。
+[MDM Framework Stress] 解決底層 I/O 阻塞 (Vold Crash)： 將刪除使用者（pm remove-user）後的等待時間由 5 秒大幅延長至 12 秒。此舉能給予系統底層守護行程 (vold) 充足的時間，於背景徹底清除殘留的加密使用者資料夾，有效防止高頻率刪除與建立所引發的 Binder 塞車與系統層級錯誤。
+[APM Data I/O] 下載按鈕誤判修正： 強化 Chrome 下載詢問視窗的 UI 節點過濾邏輯，將 Downloads（資料夾路徑名稱）明確加入排除列表。確保腳本不會因由上而下的掃描順序而誤點擊資料夾路徑，精準點擊真正的「下載 (Download)」按鈕，解決測試卡死的問題。
+🚀 v4.4.1 Updates
+[MDM Framework Stress] System Server Crash Auto-Recovery: Added an intelligent error-handling mechanism during Work Profile creation (pm create-user). If the script detects a system_server crash (e.g., "Can't find service: package", "error: closed", or "DeadSystemException"), it will automatically pause for 20 seconds to allow the Android system to perform a soft reboot and recover, preventing the entire test from failing.
+[MDM Framework Stress] I/O Bottleneck Prevention: Extended the cool-down period after deleting a user profile (pm remove-user) from 5 seconds to 12 seconds. This provides the Android Volume Daemon (vold) sufficient time to completely wipe the encrypted user directories in the background, resolving I/O congestion and Binder transaction failures during high-frequency stress tests.
+[APM Data I/O] Download Button Misclick Fix: Updated the UI Automator detection logic to explicitly exclude the "Downloads" directory path from being recognized as the action button. This ensures the script accurately targets the actual "Download" button on the Chrome "Choose where to download" prompt, fixing the issue where the test would stall.
+
 🚀 v4.3.9 更新
 [APM Data I/O] Chrome 導覽畫面 (FRE) 自動跳過： 擴充 UI Automator 偵測機制，現可自動識別並點擊 Chrome 初次啟動的導覽畫面與權限請求（如「接受並繼續」、「不用了」、「允許」等彈窗）。
 [APM Data I/O] 彈窗偵測加速： 將 UI XML 掃描間隔由 8 秒縮短至 4 秒，以便更快速地連續突破多層 Chrome 初始設定畫面，避免下載任務 Timeout。
 [APM Data I/O] Resource-ID 備用點擊： 當按鈕文字解析失敗時，新增透過介面元素 ID（如 terms_accept、negative_button）抓取絕對座標並進行精準點擊的備用防禦機制。
 [MDM Framework Stress] 工作設定檔生命週期同步： 徹底修復非同步指令導致的 Race Condition 問題。在刪除前先強制停止 User (am stop-user -f)，並在啟動時加入 -w 參數，嚴格等待 User 完全啟動 Ready 後再進行 MDM 權限派發與安裝，解決 SecurityException 報錯。
+
+🚀 v4.3.9 Updates
+[APM Data I/O] Chrome FRE Bypass Enhancement: Expanded the UI Automator detection mechanism to recognize and automatically bypass Chrome's First Run Experience (FRE) prompts and permission dialogs (e.g., "Accept & continue", "No thanks", "Allow").
+[APM Data I/O] Accelerated Prompt Detection: Reduced the UI XML polling interval from 8 seconds to 4 seconds to quickly navigate through multi-page browser setup screens and prevent test timeouts.
+[APM Data I/O] Fallback ID Clicking: Introduced a secondary UI detection method that relies on resource-id (e.g., terms_accept, negative_button) to map coordinates and click buttons when exact text matching fails.
+[MDM Framework Stress] Async Lifecycle Sync: Fixed race conditions related to Work Profile creation and deletion. Added forced user stop (am stop-user -f) before removal and introduced the -w flag to am start-user to strictly wait for the new user profile to be fully ready before installing the MDM payload and granting Profile Owner permissions, resolving previous SecurityException errors.
 
 🚀 v4.3.8 更新
 [APM Data I/O] 動態 UI 彈窗偵測： 導入 UI Automator 畫面解析機制，自動判斷是否出現「選擇下載位置」或「危險檔案（仍要下載）」等攔截視窗。
@@ -12,6 +28,14 @@
 [APM Burn-In] 選項優化： 移除清單中已失效的 Apple CDN 測試網址。
 [APM Data I/O] 穩定性修正： 解決一次觸發多個下載及第二輪測試卡死的問題；每個 Cycle 開始前會強制清除 Chrome 應用程式資料 (pm clear)，確保不出現「是否重新下載」的干擾。
 [Batch APK Install] 防干擾與超時延長： 測試前自動透過指令關閉 Google Play Protect (安全防護) 的背景掃描機制，並將單個 APK 的安裝等待上限延長至 240 秒，解決多檔連續安裝造成的卡死問題。
+
+🚀 v4.3.8 Updates
+[APM Data I/O] Dynamic UI Prompt Detection: Introduced UI Automator XML parsing to actively detect browser download prompts (e.g., "Choose where to download", "Download anyway").
+[APM Data I/O] Precision Coordinate Tapping: Replaced blind key events (TAB + ENTER) with exact X/Y coordinate extraction and tapping for the "Download" button.
+[APM Data I/O] Safe Interaction Bypass: If no security or path selection dialog appears, the tool safely skips the click action to prevent unintended UI navigation.
+[APM Burn-In] Preset Optimization: Removed the broken Apple CDN URL from the video streaming presets.
+[APM Data I/O] Cycle Reliability Fix: Fixed issues with multiple concurrent downloads and consecutive cycle failures by forcing Chrome data clearance (pm clear) before every cycle, ensuring a clean state without "Download again" prompts.
+[Batch APK Install] Anti-Interference & Timeout Extension: Automatically disables Google Play Protect (Package Verifier) before testing to prevent background scanning from blocking installations, and increased the per-APK installation timeout limit to 240 seconds.
 
 🚀 Version 4.3.7
 Release Date / 發布日期: 2026-09-01
@@ -27,20 +51,6 @@ Batch APK Installation (批次 APK 安裝)
 修復連續安裝多個 APK（如裝到第 9 個）時的卡死問題，新增自動關閉 Google Play Protect（Package Verifier 安全防護）的指令，以避免背景掃描干擾安裝。
 將單個 APK 的安裝逾時限制從 120 秒大幅延長至 240 秒。
 修復透過 adb shell pm install 時因權限不足導致安裝失敗的問題，傳輸完成後統一對 /data/local/tmp/stress_apks 目錄執行 chmod -R 777 提權。
-
-🚀 v4.3.9 Updates
-[APM Data I/O] Chrome FRE Bypass Enhancement: Expanded the UI Automator detection mechanism to recognize and automatically bypass Chrome's First Run Experience (FRE) prompts and permission dialogs (e.g., "Accept & continue", "No thanks", "Allow").
-[APM Data I/O] Accelerated Prompt Detection: Reduced the UI XML polling interval from 8 seconds to 4 seconds to quickly navigate through multi-page browser setup screens and prevent test timeouts.
-[APM Data I/O] Fallback ID Clicking: Introduced a secondary UI detection method that relies on resource-id (e.g., terms_accept, negative_button) to map coordinates and click buttons when exact text matching fails.
-[MDM Framework Stress] Async Lifecycle Sync: Fixed race conditions related to Work Profile creation and deletion. Added forced user stop (am stop-user -f) before removal and introduced the -w flag to am start-user to strictly wait for the new user profile to be fully ready before installing the MDM payload and granting Profile Owner permissions, resolving previous SecurityException errors.
-
-🚀 v4.3.8 Updates
-[APM Data I/O] Dynamic UI Prompt Detection: Introduced UI Automator XML parsing to actively detect browser download prompts (e.g., "Choose where to download", "Download anyway").
-[APM Data I/O] Precision Coordinate Tapping: Replaced blind key events (TAB + ENTER) with exact X/Y coordinate extraction and tapping for the "Download" button.
-[APM Data I/O] Safe Interaction Bypass: If no security or path selection dialog appears, the tool safely skips the click action to prevent unintended UI navigation.
-[APM Burn-In] Preset Optimization: Removed the broken Apple CDN URL from the video streaming presets.
-[APM Data I/O] Cycle Reliability Fix: Fixed issues with multiple concurrent downloads and consecutive cycle failures by forcing Chrome data clearance (pm clear) before every cycle, ensuring a clean state without "Download again" prompts.
-[Batch APK Install] Anti-Interference & Timeout Extension: Automatically disables Google Play Protect (Package Verifier) before testing to prevent background scanning from blocking installations, and increased the per-APK installation timeout limit to 240 seconds.
 
 🚀 Version 4.3.7
 Release Date : 2026-09-01

@@ -1,10 +1,25 @@
 📋 Release Notes / 版本更新日誌
+
+🚀 v4.4.1 更新
+[MDM Framework Stress] System Server 崩潰自動復原： 在建立 Work Profile（pm create-user）時加入例外捕捉機制。若偵測到 system_server 崩潰（如出現 Can't find service: package、error: closed 或 DeadSystemException），腳本會自動觸發 20 秒的安全冷卻期，等待 Android 系統完成 Soft Reboot 並自動重試，避免長時間壓力測試直接中斷失敗。
+[MDM Framework Stress] 解決底層 I/O 阻塞 (Vold Crash)： 將刪除使用者（pm remove-user）後的等待時間由 5 秒大幅延長至 12 秒。此舉能給予系統底層守護行程 (vold) 充足的時間，於背景徹底清除殘留的加密使用者資料夾，有效防止高頻率刪除與建立所引發的 Binder 塞車與系統層級錯誤。
+[APM Data I/O] 下載按鈕誤判修正： 強化 Chrome 下載詢問視窗的 UI 節點過濾邏輯，將 Downloads（資料夾路徑名稱）明確加入排除列表。確保腳本不會因由上而下的掃描順序而誤點擊資料夾路徑，精準點擊真正的「下載 (Download)」按鈕，解決測試卡死的問題。
+🚀 v4.4.1 Updates
+[MDM Framework Stress] System Server Crash Auto-Recovery: Added an intelligent error-handling mechanism during Work Profile creation (pm create-user). If the script detects a system_server crash (e.g., "Can't find service: package", "error: closed", or "DeadSystemException"), it will automatically pause for 20 seconds to allow the Android system to perform a soft reboot and recover, preventing the entire test from failing.
+[MDM Framework Stress] I/O Bottleneck Prevention: Extended the cool-down period after deleting a user profile (pm remove-user) from 5 seconds to 12 seconds. This provides the Android Volume Daemon (vold) sufficient time to completely wipe the encrypted user directories in the background, resolving I/O congestion and Binder transaction failures during high-frequency stress tests.
+[APM Data I/O] Download Button Misclick Fix: Updated the UI Automator detection logic to explicitly exclude the "Downloads" directory path from being recognized as the action button. This ensures the script accurately targets the actual "Download" button on the Chrome "Choose where to download" prompt, fixing the issue where the test would stall.
+
 🚀 v4.3.9 更新
 [APM Data I/O] Chrome 導覽畫面 (FRE) 自動跳過： 擴充 UI Automator 偵測機制，現可自動識別並點擊 Chrome 初次啟動的導覽畫面與權限請求（如「接受並繼續」、「不用了」、「允許」等彈窗）。
 [APM Data I/O] 彈窗偵測加速： 將 UI XML 掃描間隔由 8 秒縮短至 4 秒，以便更快速地連續突破多層 Chrome 初始設定畫面，避免下載任務 Timeout。
 [APM Data I/O] Resource-ID 備用點擊： 當按鈕文字解析失敗時，新增透過介面元素 ID（如 terms_accept、negative_button）抓取絕對座標並進行精準點擊的備用防禦機制。
 [MDM Framework Stress] 工作設定檔生命週期同步： 徹底修復非同步指令導致的 Race Condition 問題。在刪除前先強制停止 User (am stop-user -f)，並在啟動時加入 -w 參數，嚴格等待 User 完全啟動 Ready 後再進行 MDM 權限派發與安裝，解決 SecurityException 報錯。
 
+🚀 v4.3.9 Updates
+[APM Data I/O] Chrome FRE Bypass Enhancement: Expanded the UI Automator detection mechanism to recognize and automatically bypass Chrome's First Run Experience (FRE) prompts and permission dialogs (e.g., "Accept & continue", "No thanks", "Allow").
+[APM Data I/O] Accelerated Prompt Detection: Reduced the UI XML polling interval from 8 seconds to 4 seconds to quickly navigate through multi-page browser setup screens and prevent test timeouts.
+[APM Data I/O] Fallback ID Clicking: Introduced a secondary UI detection method that relies on resource-id (e.g., terms_accept, negative_button) to map coordinates and click buttons when exact text matching fails.
+[MDM Framework Stress] Async Lifecycle Sync: Fixed race conditions related to Work Profile creation and deletion. Added forced user stop (am stop-user -f) before removal and introduced the -w flag to am start-user to strictly wait for the new user profile to be fully ready before installing the MDM payload and granting Profile Owner permissions, resolving previous SecurityException errors.
 
 🚀 v4.3.8 更新
 [APM Data I/O] 動態 UI 彈窗偵測： 導入 UI Automator 畫面解析機制，自動判斷是否出現「選擇下載位置」或「危險檔案（仍要下載）」等攔截視窗。
@@ -13,6 +28,14 @@
 [APM Burn-In] 選項優化： 移除清單中已失效的 Apple CDN 測試網址。
 [APM Data I/O] 穩定性修正： 解決一次觸發多個下載及第二輪測試卡死的問題；每個 Cycle 開始前會強制清除 Chrome 應用程式資料 (pm clear)，確保不出現「是否重新下載」的干擾。
 [Batch APK Install] 防干擾與超時延長： 測試前自動透過指令關閉 Google Play Protect (安全防護) 的背景掃描機制，並將單個 APK 的安裝等待上限延長至 240 秒，解決多檔連續安裝造成的卡死問題。
+
+🚀 v4.3.8 Updates
+[APM Data I/O] Dynamic UI Prompt Detection: Introduced UI Automator XML parsing to actively detect browser download prompts (e.g., "Choose where to download", "Download anyway").
+[APM Data I/O] Precision Coordinate Tapping: Replaced blind key events (TAB + ENTER) with exact X/Y coordinate extraction and tapping for the "Download" button.
+[APM Data I/O] Safe Interaction Bypass: If no security or path selection dialog appears, the tool safely skips the click action to prevent unintended UI navigation.
+[APM Burn-In] Preset Optimization: Removed the broken Apple CDN URL from the video streaming presets.
+[APM Data I/O] Cycle Reliability Fix: Fixed issues with multiple concurrent downloads and consecutive cycle failures by forcing Chrome data clearance (pm clear) before every cycle, ensuring a clean state without "Download again" prompts.
+[Batch APK Install] Anti-Interference & Timeout Extension: Automatically disables Google Play Protect (Package Verifier) before testing to prevent background scanning from blocking installations, and increased the per-APK installation timeout limit to 240 seconds.
 
 🚀 Version 4.3.7
 Release Date / 發布日期: 2026-09-01
@@ -28,20 +51,6 @@ Batch APK Installation (批次 APK 安裝)
 修復連續安裝多個 APK（如裝到第 9 個）時的卡死問題，新增自動關閉 Google Play Protect（Package Verifier 安全防護）的指令，以避免背景掃描干擾安裝。
 將單個 APK 的安裝逾時限制從 120 秒大幅延長至 240 秒。
 修復透過 adb shell pm install 時因權限不足導致安裝失敗的問題，傳輸完成後統一對 /data/local/tmp/stress_apks 目錄執行 chmod -R 777 提權。
-
-🚀 v4.3.9 Updates
-[APM Data I/O] Chrome FRE Bypass Enhancement: Expanded the UI Automator detection mechanism to recognize and automatically bypass Chrome's First Run Experience (FRE) prompts and permission dialogs (e.g., "Accept & continue", "No thanks", "Allow").
-[APM Data I/O] Accelerated Prompt Detection: Reduced the UI XML polling interval from 8 seconds to 4 seconds to quickly navigate through multi-page browser setup screens and prevent test timeouts.
-[APM Data I/O] Fallback ID Clicking: Introduced a secondary UI detection method that relies on resource-id (e.g., terms_accept, negative_button) to map coordinates and click buttons when exact text matching fails.
-[MDM Framework Stress] Async Lifecycle Sync: Fixed race conditions related to Work Profile creation and deletion. Added forced user stop (am stop-user -f) before removal and introduced the -w flag to am start-user to strictly wait for the new user profile to be fully ready before installing the MDM payload and granting Profile Owner permissions, resolving previous SecurityException errors.
-
-🚀 v4.3.8 Updates
-[APM Data I/O] Dynamic UI Prompt Detection: Introduced UI Automator XML parsing to actively detect browser download prompts (e.g., "Choose where to download", "Download anyway").
-[APM Data I/O] Precision Coordinate Tapping: Replaced blind key events (TAB + ENTER) with exact X/Y coordinate extraction and tapping for the "Download" button.
-[APM Data I/O] Safe Interaction Bypass: If no security or path selection dialog appears, the tool safely skips the click action to prevent unintended UI navigation.
-[APM Burn-In] Preset Optimization: Removed the broken Apple CDN URL from the video streaming presets.
-[APM Data I/O] Cycle Reliability Fix: Fixed issues with multiple concurrent downloads and consecutive cycle failures by forcing Chrome data clearance (pm clear) before every cycle, ensuring a clean state without "Download again" prompts.
-[Batch APK Install] Anti-Interference & Timeout Extension: Automatically disables Google Play Protect (Package Verifier) before testing to prevent background scanning from blocking installations, and increased the per-APK installation timeout limit to 240 seconds.
 
 🚀 Version 4.3.7
 Release Date : 2026-09-01
@@ -61,20 +70,33 @@ Fixed a Permission Denied error during shell pm install by enforcing chmod -R 77
 
 🚀 Version 4.3.4
 Release Date / 發布日期: 2026-08-21
+
+繁體中文 (Traditional Chinese)
 [APM] 系統重啟與關機測試 (Restart & Shutdown) 邏輯修正：
+
 修復了在使用 WiFi ADB (TCP/IP) 進行重啟測試時，因 Android 系統剛開機時網路狀態不穩定，導致 Watchdog 過早介入並誤判為 ADB CONNECTION LOST 進而異常中斷測試的嚴重問題。
+
 Watchdog 斷線保護機制延後 (Watchdog Protection Deferral)：
+
 優化 Watchdog 監控盲區。將「預期斷線保護 (Expected Disconnect)」的解除時機，從「偵測到開機動畫結束」往後延遲至「60 秒開機穩定期完全結束後」。這能確保完整覆蓋設備剛啟動時載入各項系統服務的網路閃斷期。
+
 WiFi ADB 自動重連保底機制 (Auto-Reconnect Fallback Mechanism)：
+
 在開機完成後的 60 秒穩定期內，加入針對無線連線的特化保底設計。若工具偵測到當前設備是透過 WiFi ADB 連線（包含 IP:Port 格式），將會每 10 秒自動於背景執行一次 adb connect。此舉能確保因系統重啟 WiFi 模組而造成的短暫離線，都能在第一時間被瞬間接回。
 
+🚀 Version 4.3.4
+Release Date : 2026-08-21
 [APM] System Restart & Shutdown Stress Logic Fix:
-Resolved a critical issue where the ADB Watchdog would prematurely trigger a false positive ADB CONNECTION LOST error during the post-boot phase. This fix specifically addresses test interruptions caused by unstable network states immediately after boot on devices connected via WiFi ADB (TCP/IP).
-Watchdog Protection Deferral:
-Optimized the watchdog monitoring blind spot. Postponed the deactivation of the "Expected Disconnect" protection flag. It now remains fully active throughout the entire 60-second post-boot countdown, rather than turning off immediately upon UI readiness, safely covering the network initialization and service loading period.
-WiFi ADB Auto-Reconnect Fallback:
-Introduced a specialized background auto-reconnect routine during the 60-second post-boot stabilization period. For devices connected via IP address, the tool will now automatically issue a silent adb connect command every 10 seconds. This ensures instantaneous recovery from typical post-boot WiFi module resets and transient network drops.
 
+Resolved a critical issue where the ADB Watchdog would prematurely trigger a false positive ADB CONNECTION LOST error during the post-boot phase. This fix specifically addresses test interruptions caused by unstable network states immediately after boot on devices connected via WiFi ADB (TCP/IP).
+
+Watchdog Protection Deferral:
+
+Optimized the watchdog monitoring blind spot. Postponed the deactivation of the "Expected Disconnect" protection flag. It now remains fully active throughout the entire 60-second post-boot countdown, rather than turning off immediately upon UI readiness, safely covering the network initialization and service loading period.
+
+WiFi ADB Auto-Reconnect Fallback:
+
+Introduced a specialized background auto-reconnect routine during the 60-second post-boot stabilization period. For devices connected via IP address, the tool will now automatically issue a silent adb connect command every 10 seconds. This ensures instantaneous recovery from typical post-boot WiFi module resets and transient network drops.
 🚀 Version 4.3.3
 Release Date / 發布日期: 2026-08-10
 
@@ -201,6 +223,7 @@ Monkey 測試嚴格驗證機制 (v4.3.1)：
 
 相機強制冷啟動修復 (v4.2.8)：
 解決部分 USB 相機或 AOSP 系統在熱啟動下不接收 Intent 切換參數 (CAMERA_FACING) 的問題。現在切換鏡頭前，會確保徹底擊殺相機進程 (Force-stop)，保證每一次啟動皆為純淨的「冷啟動」。
+
 🚀 ADB Stress Test Console Release Notes (v4.1.0 ➔ v4.2.5)
 🇹🇼 中文版 (Chinese Version)
 🌟 核心新功能與模組 (New Core Features & Modules)
@@ -451,7 +474,8 @@ Updated the Power & Display stress test to generate genuinely randomized brightn
 
 🗑️ Removed Invalid LED Tests
 
-Confirmed that NFC LEDs on User Builds are strictly locked by OEM hardware abstraction layers and cannot be triggered via standard ADB. The LED testing module has been removed to prevent the generation of invalid test results.🚀 Release Notes: ADB Stress Test Console (v3.9.29 ➔ v4.0.4)
+Confirmed that NFC LEDs on User Builds are strictly locked by OEM hardware abstraction layers and cannot be triggered via standard ADB. The LED testing module has been removed to prevent the generation of invalid test results.🚀 Release Notes: ADB Stress Test Console 
+🚀 Release Notes: ADB Stress Test Console (v3.9.29 ➔ v4.0.4)
 🇹🇼 中文版 (Chinese Version)
 ⚠️ 【重要測試前置作業】
 在開始進行任何測試之前，請務必確認最新版（v7.0）的 TPM_OSD.apk 已與 Python 執行檔放置於同一個資料夾，並強烈建議「手動安裝」至測試設備中一次。若未安裝此 APK，最新導入的 OSD 浮水印系統與防止系統殺後台的雙重喚醒機制將無法正常運作。
@@ -622,7 +646,6 @@ Target Cycles Input Fix: Fixed a substring-matching bug where tests containing t
 
 * **YouTube Fullscreen Automation**
 * Automatically injects key events (simulating the `F` keypress) to force YouTube playback into full-screen mode during Video Streaming Stress.
-
 🚀 Android ADB Stress Test Console - 完整發布日誌 (v3.9.5 - v3.9.11)
 [Latest Build] v3.9.11 — Pre-flight Check & Flag Verifier Update
 •	🇹🇼 中文更新說明：
@@ -690,6 +713,7 @@ v3.9.5 - May 04, 2026
 ⏱️ Startup Sequence & UI Freeze Correction: Reordered the GDPR privacy dialog to intercept before background timers and auto-scans trigger, resolving the UI freeze bug upon initial launch.
 
 🧹 Logcat Memory Leak Fix: Improved the file handle management for background logging processes, preventing potential memory leaks during extremely long-term stress testing.
+
 
 [Archived Version] v3.9.3 - May 01, 2026
 🇹🇼 中文更新說明：
@@ -783,6 +807,8 @@ This version represents a major architectural leap from a single-device tool to 
 * **智慧自動修復機制**：內建 ADB 伺服器監測系統，當偵測到 ADB 無回應時會自動執行 Kill/Start Server 進行修復。
 * **UI 介面現代化**：採用雙面板配置（380px 控制側欄），專為多機狀態監控與即時彙整日誌顯示而優化。
 
+
+這兩份 Release Notes 清楚呈現了您的工具如何從單純的腳本封裝進化成專業的多機自動化測試平台。
 
 🚀 Release Notes: Android ADB Stress Test Console (Pro Edition)
 Version: 1.0.1
