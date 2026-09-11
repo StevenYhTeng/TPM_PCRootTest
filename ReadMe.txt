@@ -1,9 +1,28 @@
 📋 Release Notes / 版本更新日誌
 
+🚀 v4.4.3 更新**
+[MDM Framework Stress] 修正 OOM 崩潰時的 Wi-Fi ADB 斷線誤判：** 解決因極端記憶體耗盡導致 `system_server` 崩潰（軟重啟）時，背景 ADB Watchdog 會誤判連線遺失並強制中斷測試的問題。現已在 120 秒的復原等待期間正確暫停 Watchdog 監控 (`expected_disconnect = True`)。
+[MDM Framework Stress] 新增 Wi-Fi ADB 自動重連機制：** 針對無線除錯環境 (`IP:PORT`) 增加主動重連邏輯。當系統崩潰重啟時，腳本會在背景復原迴圈中不斷嘗試 `adb connect`，確保 Android 系統恢復後能無縫接續下一圈測試。
+[MDM Framework Stress] 擴充崩潰偵測條件：** 強化了錯誤訊息捕捉邏輯（包含回傳空值或一般 `"error"` 字串），確保只要 Android 框架異常死亡，都能 100% 觸發自動防禦與復原機制。
+
+🚀 v4.4.3 Updates**
+[MDM Framework Stress] Fixed Wi-Fi ADB Disconnect False Alarms During OOM Crashes:** Resolved an issue where a `system_server` crash (Soft Reboot) caused by extreme OOM would trigger the background ADB Watchdog to prematurely abort the test. The watchdog is now properly paused (`expected_disconnect = True`) during the 120-second crash recovery phase.
+[MDM Framework Stress] Added Wi-Fi ADB Auto-Reconnect:** Implemented an active reconnection mechanism specifically for wireless debugging (`IP:PORT`). During a system crash, the script now automatically pings `adb connect` in the background loop to ensure the test resumes seamlessly once the Android system recovers.
+[MDM Framework Stress] Expanded Crash Detection:** Broadened the error parsing conditions (catching `"error"` or empty returns) to reliably trigger the auto-recovery loop whenever the Android framework dies unexpectedly.
+
+🚀 v4.4.2 更新
+[MDM Framework Stress] 極端 OOM 與系統軟重啟自動復原： 解決在極高次數迴圈（近 500 圈）時，因系統記憶體耗盡 (OOM) 導致垃圾回收 (GC) 逾時，進而引發 system_server 崩潰重啟 (Soft Reboot) 的問題。腳本現加入動態防禦機制，當偵測到服務遺失或斷線 (error: closed、Can't find service) 時，會自動進入最長 120 秒的等待復原迴圈，讓系統完成重啟與自我修復後無縫接續測試。
+[MDM Framework Stress] 記憶體 GC 與 I/O 冷卻最佳化： 將刪除工作設定檔 (pm remove-user) 後的冷卻時間進一步延長至 15 秒，給予 Android 系統更充裕的緩衝時間來執行背景記憶體回收 (Garbage Collection) 以及清除殘留的加密資料夾，大幅減緩長時間測試下的記憶體碎片化累積速度。
+
+🚀 v4.4.2 Updates
+[MDM Framework Stress] Extreme OOM & Soft Reboot Auto-Recovery: Addressed a critical issue where extreme memory pressure (OOM) causes Garbage Collection (GC) timeouts and crashes the system_server (Soft Reboot) during high-cycle executions (e.g., near cycle 500). The script now detects soft reboots (catching error: closed or Can't find service) and initiates a dynamic 120-second recovery polling loop, allowing the Android system to stabilize and resume the test automatically instead of failing.
+[MDM Framework Stress] Optimized GC & I/O Cool-down: Extended the post-deletion (pm remove-user) wait time to 15 seconds. This provides the Android system sufficient buffer to execute background Garbage Collection and thoroughly clear encrypted user data volumes, significantly reducing memory fragmentation accumulation over long stress runs.
+
 🚀 v4.4.1 更新
 [MDM Framework Stress] System Server 崩潰自動復原： 在建立 Work Profile（pm create-user）時加入例外捕捉機制。若偵測到 system_server 崩潰（如出現 Can't find service: package、error: closed 或 DeadSystemException），腳本會自動觸發 20 秒的安全冷卻期，等待 Android 系統完成 Soft Reboot 並自動重試，避免長時間壓力測試直接中斷失敗。
 [MDM Framework Stress] 解決底層 I/O 阻塞 (Vold Crash)： 將刪除使用者（pm remove-user）後的等待時間由 5 秒大幅延長至 12 秒。此舉能給予系統底層守護行程 (vold) 充足的時間，於背景徹底清除殘留的加密使用者資料夾，有效防止高頻率刪除與建立所引發的 Binder 塞車與系統層級錯誤。
 [APM Data I/O] 下載按鈕誤判修正： 強化 Chrome 下載詢問視窗的 UI 節點過濾邏輯，將 Downloads（資料夾路徑名稱）明確加入排除列表。確保腳本不會因由上而下的掃描順序而誤點擊資料夾路徑，精準點擊真正的「下載 (Download)」按鈕，解決測試卡死的問題。
+
 🚀 v4.4.1 Updates
 [MDM Framework Stress] System Server Crash Auto-Recovery: Added an intelligent error-handling mechanism during Work Profile creation (pm create-user). If the script detects a system_server crash (e.g., "Can't find service: package", "error: closed", or "DeadSystemException"), it will automatically pause for 20 seconds to allow the Android system to perform a soft reboot and recover, preventing the entire test from failing.
 [MDM Framework Stress] I/O Bottleneck Prevention: Extended the cool-down period after deleting a user profile (pm remove-user) from 5 seconds to 12 seconds. This provides the Android Volume Daemon (vold) sufficient time to completely wipe the encrypted user directories in the background, resolving I/O congestion and Binder transaction failures during high-frequency stress tests.
